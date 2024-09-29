@@ -1,12 +1,22 @@
-[gd_scene load_steps=10 format=3 uid="uid://bk1gddcc2roeo"]
+[gd_scene load_steps=18 format=3 uid="uid://bk1gddcc2roeo"]
 
 [ext_resource type="Script" path="res://scripts/player/playerMovement.gd" id="1_s43xl"]
 [ext_resource type="Texture2D" uid="uid://cd86pvye17pgw" path="res://images/frog.png" id="2_w55qo"]
 [ext_resource type="Script" path="res://scripts/mainCam.gd" id="3_vkxb3"]
 [ext_resource type="Material" uid="uid://okbxa6flqno4" path="res://materials/dirt_mat.tres" id="4_k5ohe"]
 [ext_resource type="Material" uid="uid://cedljbkpxb41x" path="res://materials/brickwall_mat.tres" id="5_0mmkt"]
+[ext_resource type="Material" uid="uid://c8foud2c0grvr" path="res://materials/brickwallsmall_mat.tres" id="5_55inp"]
+[ext_resource type="Material" uid="uid://bxnxm2o0sexx4" path="res://materials/cloudmat.tres" id="7_u1pia"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_snqhs"]
+
+[sub_resource type="SphereMesh" id="SphereMesh_226dk"]
+material = ExtResource("7_u1pia")
+radius = 1000.0
+
+[sub_resource type="SphereMesh" id="SphereMesh_40x86"]
+radius = 0.025
+height = 0.5
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_y1j0e"]
 size = Vector3(9.8282, 80.0635, 1)
@@ -17,6 +27,26 @@ material = ExtResource("5_0mmkt")
 [sub_resource type="LabelSettings" id="LabelSettings_r2uiu"]
 font_size = 64
 font_color = Color(0.720802, 0, 0.238248, 1)
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1f4mq"]
+sky_top_color = Color(0.0523778, 0.151881, 0.2568, 1)
+sky_horizon_color = Color(0.764755, 0.325511, 0.237704, 1)
+sky_curve = 0.0955921
+ground_bottom_color = Color(0.0374046, 0.0637393, 0.117509, 1)
+ground_horizon_color = Color(0.764706, 0.32549, 0.239216, 1)
+ground_curve = 0.0546419
+
+[sub_resource type="Sky" id="Sky_b61ug"]
+sky_material = SubResource("ProceduralSkyMaterial_1f4mq")
+
+[sub_resource type="Environment" id="Environment_u8v43"]
+background_mode = 2
+sky = SubResource("Sky_b61ug")
+
+[sub_resource type="SphereMesh" id="SphereMesh_xyiy8"]
+material = ExtResource("7_u1pia")
+radius = 100.0
+height = 34.607
 
 [node name="main" type="Node3D"]
 
@@ -45,8 +75,9 @@ spot_angle = 12.7899
 
 [node name="Sprite3D" type="Sprite3D" parent="Player"]
 transform = Transform3D(3, 0, 0, 0, 3, 0, 0, 0, 1, 0.00137296, -0.301518, -0.0170275)
-shaded = true
+alpha_scissor_threshold = 0.639
 texture_filter = 0
+render_priority = 5
 texture = ExtResource("2_w55qo")
 
 [node name="Camera3D" type="Camera3D" parent="Player" node_paths=PackedStringArray("player")]
@@ -57,38 +88,47 @@ script = ExtResource("3_vkxb3")
 player = NodePath("..")
 smooth_speed = 10.0
 
+[node name="cloudbg" type="MeshInstance3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 0.684242, -0.729255, 0, 0.729255, 0.684242, 0, -293.53, -305.298)
+mesh = SubResource("SphereMesh_226dk")
+skeleton = NodePath("../..")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Player"]
+transform = Transform3D(5.45537, 0, 0, 0, 0.0137527, 0, 0, 0, 4.39519, 0, -0.426632, -0.131434)
+mesh = SubResource("SphereMesh_40x86")
+
 [node name="floor" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -81.3011, -0.472182)
 use_collision = true
 size = Vector3(6.70647, 164.511, 6.82605)
 material = ExtResource("4_k5ohe")
 
-[node name="floor12" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.316845, 4.07685, -13.5641)
+[node name="platform" type="CSGBox3D" parent="."]
+transform = Transform3D(-0.999558, 0, -0.029736, 0, 1, 0, 0.029736, 0, -0.999558, -0.316845, 1.34433, -13.7182)
 use_collision = true
 size = Vector3(5, 1, 5)
-material = ExtResource("4_k5ohe")
+material = ExtResource("5_55inp")
 
-[node name="floor13" type="CSGBox3D" parent="."]
-transform = Transform3D(0.552926, 0, 0.83323, 0, 1, 0, -0.83323, 0, 0.552926, 7.56914, 8.21944, -18.6435)
+[node name="platform4" type="CSGBox3D" parent="."]
+transform = Transform3D(-0.999558, 0, -0.029736, 0, 1, 0, 0.029736, 0, -0.999558, -0.342764, 12.5664, -14.2323)
 use_collision = true
-size = Vector3(5, 1, 5)
-material = ExtResource("4_k5ohe")
+size = Vector3(3.18872, 4.672, 3.9707)
+material = ExtResource("5_55inp")
 
-[node name="floor14" type="CSGBox3D" parent="."]
-transform = Transform3D(0.868234, 0, 0.496156, 0, 1, 0, -0.496156, 0, 0.868234, -7.09842, 10.6355, -20.7124)
+[node name="platform2" type="CSGBox3D" parent="."]
+transform = Transform3D(-0.999558, 0, -0.029736, 0, 1, 0, 0.029736, 0, -0.999558, 3.17348, 6.13477, -14.6776)
 use_collision = true
-size = Vector3(5, 1, 5)
-material = ExtResource("4_k5ohe")
+size = Vector3(2.87683, 1, 5)
+material = ExtResource("5_55inp")
 
-[node name="floor15" type="CSGBox3D" parent="."]
-transform = Transform3D(0.0561352, 0, 0.998423, 0, 1, 0, -0.998423, 0, 0.0561352, -0.0392632, 16.8171, -14.533)
+[node name="platform3" type="CSGBox3D" parent="."]
+transform = Transform3D(-0.999558, 0, -0.029736, 0, 1, 0, 0.029736, 0, -0.999558, -3.44375, 6.13477, -14.6477)
 use_collision = true
-size = Vector3(5, 1, 5)
-material = ExtResource("4_k5ohe")
+size = Vector3(2.93091, 1, 5)
+material = ExtResource("5_55inp")
 
 [node name="Tunnel" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -14.0204)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5107, -14.0204)
 
 [node name="Wall" type="CollisionShape3D" parent="Tunnel"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0274277, 30.1262, -0.197896)
@@ -136,7 +176,7 @@ mesh = SubResource("PlaneMesh_k7u2f")
 skeleton = NodePath("")
 
 [node name="Tunnel2" type="StaticBody3D" parent="Tunnel"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -77.665, 0)
+transform = Transform3D(0.925, 0, 0, 0, 1, 0, 0, 0, 0.855, 0, -77.665, -0.99)
 
 [node name="Wall" type="CollisionShape3D" parent="Tunnel/Tunnel2"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0274277, 30.1262, -0.197896)
@@ -241,3 +281,25 @@ offset_bottom = 75.0
 rotation = -0.263545
 scale = Vector2(0.834514, 0.686633)
 label_settings = SubResource("LabelSettings_r2uiu")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_u8v43")
+
+[node name="cloudsphere" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.996112, -0.0880946, 0, 0.0880946, 0.996112, 0.483696, -20.1541, -22.9686)
+mesh = SubResource("SphereMesh_xyiy8")
+
+[node name="cloudsphere2" type="MeshInstance3D" parent="cloudsphere"]
+transform = Transform3D(0.514335, 0, -0.857589, 0, 1, 0, 0.857589, 0, 0.514335, 0, -10.3564, 0)
+mesh = SubResource("SphereMesh_xyiy8")
+skeleton = NodePath("../..")
+
+[node name="cloudsphere4" type="MeshInstance3D" parent="cloudsphere"]
+transform = Transform3D(0.967166, 0.0842602, 0.239772, -0.0966321, 0.994505, 0.0402977, -0.235059, -0.0621442, 0.969993, 0, 8.51107, -1.6686)
+mesh = SubResource("SphereMesh_xyiy8")
+skeleton = NodePath("../..")
+
+[node name="cloudsphere3" type="MeshInstance3D" parent="cloudsphere"]
+transform = Transform3D(0.931964, 0, -0.362552, -0.1203, 0.943344, -0.30924, 0.342011, 0.331815, 0.879163, -1.27003, -36.159, -7.02757)
+mesh = SubResource("SphereMesh_xyiy8")
+skeleton = NodePath("../..")

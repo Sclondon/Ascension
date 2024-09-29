@@ -30,13 +30,14 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.is_pressed():
+				# Check for custom jump action
+			if $RayCast3D.is_colliding():
+				apply_central_impulse(Vector3(0, jump_strength, 0))
 			is_moving = true
 		elif event.is_released():
 			is_moving = false
 			
-	# Check for custom jump action
-	if Input.is_action_just_pressed("jump") and $RayCast3D.is_colliding():
-		apply_central_impulse(Vector3(0, jump_strength, 0))
+
 
 func _process(delta: float) -> void:
 	if is_moving:

@@ -2,9 +2,9 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cnmi1qi25tqnk"
-path.s3tc="res://.godot/imported/brickwall.png-f3d8cb1de84ae11ca30b795dafa8fe6c.s3tc.ctex"
-path.etc2="res://.godot/imported/brickwall.png-f3d8cb1de84ae11ca30b795dafa8fe6c.etc2.ctex"
+uid="uid://vh8ttfbh1clr"
+path.s3tc="res://.godot/imported/skybox2.jpeg-cd1c05634b399b9ab33f1b0aacdff59e.s3tc.ctex"
+path.etc2="res://.godot/imported/skybox2.jpeg-cd1c05634b399b9ab33f1b0aacdff59e.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
@@ -12,8 +12,8 @@ metadata={
 
 [deps]
 
-source_file="res://images/brickwall.png"
-dest_files=["res://.godot/imported/brickwall.png-f3d8cb1de84ae11ca30b795dafa8fe6c.s3tc.ctex", "res://.godot/imported/brickwall.png-f3d8cb1de84ae11ca30b795dafa8fe6c.etc2.ctex"]
+source_file="res://images/skybox2.jpeg"
+dest_files=["res://.godot/imported/skybox2.jpeg-cd1c05634b399b9ab33f1b0aacdff59e.s3tc.ctex", "res://.godot/imported/skybox2.jpeg-cd1c05634b399b9ab33f1b0aacdff59e.etc2.ctex"]
 
 [params]
 
