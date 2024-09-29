@@ -1,0 +1,243 @@
+[gd_scene load_steps=10 format=3 uid="uid://bk1gddcc2roeo"]
+
+[ext_resource type="Script" path="res://scripts/player/playerMovement.gd" id="1_s5saq"]
+[ext_resource type="Script" path="res://mainCam.gd" id="1_xuvj1"]
+[ext_resource type="Material" uid="uid://cedljbkpxb41x" path="res://materials/brickwall_mat.tres" id="2_pv7jh"]
+[ext_resource type="Texture2D" uid="uid://cd86pvye17pgw" path="res://images/frog.png" id="3_dy0fc"]
+[ext_resource type="Material" uid="uid://okbxa6flqno4" path="res://materials/dirt_mat.tres" id="3_jdmeb"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_snqhs"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_y1j0e"]
+size = Vector3(9.8282, 80.0635, 1)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_k7u2f"]
+material = ExtResource("2_pv7jh")
+
+[sub_resource type="LabelSettings" id="LabelSettings_r2uiu"]
+font_size = 64
+font_color = Color(0.720802, 0, 0.238248, 1)
+
+[node name="main" type="Node3D"]
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.265388, 0.964142, 0, -0.964142, 0.265388, 0, 5.26254, 13.8096)
+light_angular_distance = 40.0
+
+[node name="Player" type="RigidBody3D" parent="." node_paths=PackedStringArray("camera")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.53236, 0)
+lock_rotation = true
+script = ExtResource("1_s5saq")
+camera = NodePath("Camera3D")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 0, 0, 0)
+shape = SubResource("CapsuleShape3D_snqhs")
+
+[node name="RayCast3D" type="RayCast3D" parent="Player"]
+target_position = Vector3(0, -0.6, 0)
+
+[node name="SpotLight3D" type="SpotLight3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 0.159778, 0.987153, 0, -0.987153, 0.159778, 0, 5, 0.891261)
+shadow_enabled = true
+spot_range = 24.8
+spot_angle = 12.7899
+
+[node name="Sprite3D" type="Sprite3D" parent="Player"]
+transform = Transform3D(3, 0, 0, 0, 3, 0, 0, 0, 1, 0.00137296, -0.301518, -0.0170275)
+shaded = true
+texture_filter = 0
+texture = ExtResource("3_dy0fc")
+
+[node name="Camera3D" type="Camera3D" parent="Player" node_paths=PackedStringArray("player")]
+transform = Transform3D(1, 0, 0, 0, 0.918018, 0.396539, 0, -0.396539, 0.918018, 0, 1.93311, 5.29607)
+fov = 55.0
+near = 0.293
+script = ExtResource("1_xuvj1")
+player = NodePath("..")
+smooth_speed = 10.0
+
+[node name="floor" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -81.3011, -0.472182)
+use_collision = true
+size = Vector3(6.70647, 164.511, 6.82605)
+material = ExtResource("3_jdmeb")
+
+[node name="floor12" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.316845, 4.07685, -13.5641)
+use_collision = true
+size = Vector3(5, 1, 5)
+material = ExtResource("3_jdmeb")
+
+[node name="floor13" type="CSGBox3D" parent="."]
+transform = Transform3D(0.552926, 0, 0.83323, 0, 1, 0, -0.83323, 0, 0.552926, 7.56914, 8.21944, -18.6435)
+use_collision = true
+size = Vector3(5, 1, 5)
+material = ExtResource("3_jdmeb")
+
+[node name="floor14" type="CSGBox3D" parent="."]
+transform = Transform3D(0.868234, 0, 0.496156, 0, 1, 0, -0.496156, 0, 0.868234, -7.09842, 10.6355, -20.7124)
+use_collision = true
+size = Vector3(5, 1, 5)
+material = ExtResource("3_jdmeb")
+
+[node name="floor15" type="CSGBox3D" parent="."]
+transform = Transform3D(0.0561352, 0, 0.998423, 0, 1, 0, -0.998423, 0, 0.0561352, -0.0392632, 16.8171, -14.533)
+use_collision = true
+size = Vector3(5, 1, 5)
+material = ExtResource("3_jdmeb")
+
+[node name="Tunnel" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -14.0204)
+
+[node name="Wall" type="CollisionShape3D" parent="Tunnel"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0274277, 30.1262, -0.197896)
+shape = SubResource("BoxShape3D_y1j0e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Tunnel/Wall"]
+transform = Transform3D(5, 0, 0, 0, -4.37114e-08, -40, 0, 1, -1.74846e-06, -0.0274277, 0.0141144, 0.333698)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")
+
+[node name="Wall2" type="CollisionShape3D" parent="Tunnel"]
+transform = Transform3D(0.5, 0, 0.866025, 0, 1, 0, -0.866025, 0, 0.5, 7.19567, 30.1262, -4.35032)
+shape = SubResource("BoxShape3D_y1j0e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Tunnel/Wall2"]
+transform = Transform3D(5, 0, 0, 0, -4.37114e-08, -40, 0, 1, -1.74846e-06, -0.0274277, 0.0141144, 0.333698)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")
+
+[node name="Wall3" type="CollisionShape3D" parent="Tunnel"]
+transform = Transform3D(0.5, 0, -0.866025, 0, 1, 0, 0.866025, 0, 0.5, -7.07347, 30.1262, -4.20853)
+shape = SubResource("BoxShape3D_y1j0e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Tunnel/Wall3"]
+transform = Transform3D(5, 0, 0, 0, -4.37114e-08, -40, 0, 1, -1.74846e-06, -0.0274277, 0.0141144, 0.333698)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")
+
+[node name="Wall4" type="CollisionShape3D" parent="Tunnel"]
+transform = Transform3D(-4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, -9.3009, 30.1262, -13.1915)
+shape = SubResource("BoxShape3D_y1j0e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Tunnel/Wall4"]
+transform = Transform3D(5, 0, 0, 0, -4.37114e-08, -40, 0, 1, -1.74846e-06, -0.0274277, 0.0141144, 0.333698)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")
+
+[node name="Wall5" type="CollisionShape3D" parent="Tunnel"]
+transform = Transform3D(-4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, 9.57269, 30.1262, -13.5067)
+shape = SubResource("BoxShape3D_y1j0e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Tunnel/Wall5"]
+transform = Transform3D(5, 0, 0, 0, -4.37114e-08, -40, 0, 1, -1.74846e-06, -0.0274277, 0.0141144, 0.333698)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")
+
+[node name="Tunnel2" type="StaticBody3D" parent="Tunnel"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -77.665, 0)
+
+[node name="Wall" type="CollisionShape3D" parent="Tunnel/Tunnel2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0274277, 30.1262, -0.197896)
+shape = SubResource("BoxShape3D_y1j0e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Tunnel/Tunnel2/Wall"]
+transform = Transform3D(5, 0, 0, 0, -4.37114e-08, -40, 0, 1, -1.74846e-06, -0.0274277, 0.0141144, 0.333698)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")
+
+[node name="Wall2" type="CollisionShape3D" parent="Tunnel/Tunnel2"]
+transform = Transform3D(0.5, 0, 0.866025, 0, 1, 0, -0.866025, 0, 0.5, 7.19567, 30.1262, -4.35032)
+shape = SubResource("BoxShape3D_y1j0e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Tunnel/Tunnel2/Wall2"]
+transform = Transform3D(5, 0, 0, 0, -4.37114e-08, -40, 0, 1, -1.74846e-06, -0.0274277, 0.0141144, 0.333698)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")
+
+[node name="Wall3" type="CollisionShape3D" parent="Tunnel/Tunnel2"]
+transform = Transform3D(0.5, 0, -0.866025, 0, 1, 0, 0.866025, 0, 0.5, -7.07347, 30.1262, -4.20853)
+shape = SubResource("BoxShape3D_y1j0e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Tunnel/Tunnel2/Wall3"]
+transform = Transform3D(5, 0, 0, 0, -4.37114e-08, -40, 0, 1, -1.74846e-06, -0.0274277, 0.0141144, 0.333698)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")
+
+[node name="Wall4" type="CollisionShape3D" parent="Tunnel/Tunnel2"]
+transform = Transform3D(-4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, -9.3009, 30.1262, -13.1915)
+shape = SubResource("BoxShape3D_y1j0e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Tunnel/Tunnel2/Wall4"]
+transform = Transform3D(5, 0, 0, 0, -4.37114e-08, -40, 0, 1, -1.74846e-06, -0.0274277, 0.0141144, 0.333698)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")
+
+[node name="Wall5" type="CollisionShape3D" parent="Tunnel/Tunnel2"]
+transform = Transform3D(-4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, 9.57269, 30.1262, -13.5067)
+shape = SubResource("BoxShape3D_y1j0e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Tunnel/Tunnel2/Wall5"]
+transform = Transform3D(5, 0, 0, 0, -4.37114e-08, -40, 0, 1, -1.74846e-06, -0.0274277, 0.0141144, 0.333698)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")
+
+[node name="Tunnel3" type="StaticBody3D" parent="Tunnel"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -155.04, 0)
+
+[node name="Wall" type="CollisionShape3D" parent="Tunnel/Tunnel3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0274277, 30.1262, -0.197896)
+shape = SubResource("BoxShape3D_y1j0e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Tunnel/Tunnel3/Wall"]
+transform = Transform3D(5, 0, 0, 0, -4.37114e-08, -40, 0, 1, -1.74846e-06, -0.0274277, 0.0141144, 0.333698)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")
+
+[node name="Wall2" type="CollisionShape3D" parent="Tunnel/Tunnel3"]
+transform = Transform3D(0.5, 0, 0.866025, 0, 1, 0, -0.866025, 0, 0.5, 7.19567, 30.1262, -4.35032)
+shape = SubResource("BoxShape3D_y1j0e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Tunnel/Tunnel3/Wall2"]
+transform = Transform3D(5, 0, 0, 0, -4.37114e-08, -40, 0, 1, -1.74846e-06, -0.0274277, 0.0141144, 0.333698)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")
+
+[node name="Wall3" type="CollisionShape3D" parent="Tunnel/Tunnel3"]
+transform = Transform3D(0.5, 0, -0.866025, 0, 1, 0, 0.866025, 0, 0.5, -7.07347, 30.1262, -4.20853)
+shape = SubResource("BoxShape3D_y1j0e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Tunnel/Tunnel3/Wall3"]
+transform = Transform3D(5, 0, 0, 0, -4.37114e-08, -40, 0, 1, -1.74846e-06, -0.0274277, 0.0141144, 0.333698)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")
+
+[node name="Wall4" type="CollisionShape3D" parent="Tunnel/Tunnel3"]
+transform = Transform3D(-4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, -9.3009, 30.1262, -13.1915)
+shape = SubResource("BoxShape3D_y1j0e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Tunnel/Tunnel3/Wall4"]
+transform = Transform3D(5, 0, 0, 0, -4.37114e-08, -40, 0, 1, -1.74846e-06, -0.0274277, 0.0141144, 0.333698)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")
+
+[node name="Wall5" type="CollisionShape3D" parent="Tunnel/Tunnel3"]
+transform = Transform3D(-4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, 9.57269, 30.1262, -13.5067)
+shape = SubResource("BoxShape3D_y1j0e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Tunnel/Tunnel3/Wall5"]
+transform = Transform3D(5, 0, 0, 0, -4.37114e-08, -40, 0, 1, -1.74846e-06, -0.0274277, 0.0141144, 0.333698)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="Label" type="Label" parent="CanvasLayer"]
+offset_left = 23.0
+offset_top = 52.0
+offset_right = 63.0
+offset_bottom = 75.0
+rotation = -0.263545
+scale = Vector2(0.834514, 0.686633)
+label_settings = SubResource("LabelSettings_r2uiu")

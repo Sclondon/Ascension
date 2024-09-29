@@ -1,0 +1,10 @@
+[gd_resource type="StandardMaterial3D" load_steps=2 format=3 uid="uid://cedljbkpxb41x"]
+
+[ext_resource type="Texture2D" uid="uid://cnmi1qi25tqnk" path="res://images/brickwall.png" id="1_fgkur"]
+
+[resource]
+albedo_texture = ExtResource("1_fgkur")
+uv1_scale = Vector3(5, 40, 1)
+uv1_triplanar_sharpness = 150.0
+uv1_world_triplanar = true
+texture_filter = 0

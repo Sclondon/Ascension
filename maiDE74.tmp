@@ -1,0 +1,59 @@
+[gd_scene load_steps=6 format=3 uid="uid://bk1gddcc2roeo"]
+
+[ext_resource type="Script" path="res://scripts/player/playerMovement.gd" id="1_s5saq"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_i1xdl"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_r7mlc"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_6g2n3"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_twcgo"]
+material = SubResource("StandardMaterial3D_6g2n3")
+
+[node name="Node3D" type="Node3D"]
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.391213, 0.9203, 0, -0.9203, 0.391213, 0, 5.26254, 13.8096)
+
+[node name="Tunnel" type="CSGPolygon3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, 0, 0, -5)
+use_collision = true
+polygon = PackedVector2Array(-10, 7.5, -5, 15, 5, 15, 10, 7.5, 5, 0, -5, 0)
+depth = 70.0
+smooth_faces = true
+material = SubResource("StandardMaterial3D_i1xdl")
+
+[node name="tunnelCutout" type="CSGPolygon3D" parent="Tunnel"]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 1, 0, 1, 0)
+operation = 2
+polygon = PackedVector2Array(-10, 7.5, -5, 15, 5, 15, 10, 7.5, 5, 0, -5, 0)
+depth = 80.0
+
+[node name="Player" type="RigidBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.53236, 0)
+lock_rotation = true
+script = ExtResource("1_s5saq")
+speed = null
+jump_strength = null
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+shape = SubResource("BoxShape3D_r7mlc")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Player"]
+mesh = SubResource("BoxMesh_twcgo")
+
+[node name="RayCast3D" type="RayCast3D" parent="Player"]
+target_position = Vector3(0, -0.6, 0)
+
+[node name="SpotLight3D" type="SpotLight3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 5, 0)
+spot_range = 12.7621
+spot_angle = 22.4312
+
+[node name="Camera3D" type="Camera3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 0.738126, 0.674663, 0, -0.674663, 0.738126, 0, 5.33224, 9.33312)
+
+[node name="CSGBox3D" type="CSGBox3D" parent="."]
+use_collision = true
+size = Vector3(25.3769, 0.574707, 31.3406)
