@@ -1,0 +1,24 @@
+[gd_scene load_steps=4 format=3 uid="uid://c7dntl6vclued"]
+
+[ext_resource type="Material" uid="uid://cedljbkpxb41x" path="res://materials/brickwall_mat.tres" id="1_nix1x"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_y1j0e"]
+size = Vector3(7, 10, 1)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_k7u2f"]
+material = ExtResource("1_nix1x")
+
+[node name="TowerWall" type="StaticBody3D"]
+
+[node name="Wall" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape3D_y1j0e")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Wall"]
+transform = Transform3D(3.5, 0, 0, 0, -4.37114e-08, -5, 0, 1, -2.18557e-07, 0, 0, 0.5)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")
+
+[node name="MeshInstance3D2" type="MeshInstance3D" parent="Wall"]
+transform = Transform3D(-3.5, -8.74228e-08, 1.91069e-14, 0, -4.37114e-08, -5, 3.0598e-07, -1, 2.18557e-07, 0, 0, 0.5)
+mesh = SubResource("PlaneMesh_k7u2f")
+skeleton = NodePath("")

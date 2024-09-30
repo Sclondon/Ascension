@@ -73,21 +73,12 @@ label_settings = SubResource("LabelSettings_r2uiu")
 transform = Transform3D(0.838528, 0.527971, -0.134602, -0.111711, 0.408385, 0.905948, 0.533284, -0.744626, 0.401422, 0, 5.26254, 13.8096)
 shadow_blur = 9.9
 
-[node name="Camera3D" type="Camera3D" parent="." node_paths=PackedStringArray("player")]
-transform = Transform3D(1, 0, 0, 0, 0.918018, 0.396539, 0, -0.396539, 0.918018, 0, 5.46547, 14.7063)
-fov = 55.0
-near = 0.293
-script = ExtResource("3_vkxb3")
-orbit_distance = 7.0
-height_offset = 2.0
-player = NodePath("../Player")
-
 [node name="Player" type="RigidBody3D" parent="." node_paths=PackedStringArray("camera", "spawnPos")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.53236, 9.41026)
 lock_rotation = true
 script = ExtResource("1_s43xl")
 death_plane = -50
-camera = NodePath("../Camera3D")
+camera = NodePath("Camera3D")
 spawnPos = NodePath("../SpawnPoint")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
@@ -107,12 +98,19 @@ spot_angle_attenuation = 0.164938
 
 [node name="Sprite3D" type="Sprite3D" parent="Player"]
 transform = Transform3D(3, 0, 0, 0, 3, 0, 0, 0, 1, 0.00137296, -0.301518, -0.0170275)
-billboard = 1
 shaded = true
 alpha_scissor_threshold = 0.639
 texture_filter = 0
 render_priority = 5
 texture = ExtResource("2_w55qo")
+
+[node name="Camera3D" type="Camera3D" parent="Player" node_paths=PackedStringArray("player")]
+transform = Transform3D(1, 0, 0, 0, 0.918018, 0.396539, 0, -0.396539, 0.918018, 0, 1.93311, 5.29607)
+fov = 55.0
+near = 0.293
+script = ExtResource("3_vkxb3")
+player = NodePath("..")
+smooth_speed = 10.0
 
 [node name="cloudbg" type="MeshInstance3D" parent="Player"]
 transform = Transform3D(1, 0, 0, 0, 0.802276, -0.596953, 0, 0.596953, 0.802276, 0, -222.727, -33.4537)
@@ -310,14 +308,16 @@ skeleton = NodePath("")
 [node name="TowerManager" type="Node3D" parent="." node_paths=PackedStringArray("player", "platform_spawner")]
 script = ExtResource("8_s7y8x")
 wall_segment_scene = ExtResource("9_2h50k")
-tower_radius = 5.35
-max_sections = 10
+section_height = 11.0
+tower_radius = 5.25
+max_sections = 7
 player = NodePath("../Player")
 platform_spawner = NodePath("PlatformManager")
 
 [node name="PlatformManager" type="Node3D" parent="TowerManager"]
 script = ExtResource("9_c2mdi")
 platform_scene = ExtResource("10_amj47")
-tower_radius = 5.35
-max_platforms_per_segment = 20
-spawn_probability = 1.0
+tower_radius = 5.25
+max_platforms_per_section = 100
+spawn_chance = 1.0
+min_distance_between_platforms = 1.0

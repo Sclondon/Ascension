@@ -1,30 +1,23 @@
 extends Camera3D
 
+@export var orbit_distance: float = 10.0  # Distance from the player
+@export var height_offset: float = 5.0    # Height above the player
+
 # Reference to the player
-@export var player: Node3D
+@export var player: RigidBody3D
 
-# Store the initial offset based on the camera's current position relative to the player
-var camera_offset: Vector3
+# Position of the tower center (assuming it's the origin)
+var tower_center: Vector3 = Vector3.ZERO  
 
-# Speed of the camera movement
-@export var smooth_speed: float = 5.0  # Adjust this for more or less smoothness
+func _process(delta: float) -> void:
+	if player:
+		# Get the player's position
+		var player_position = player.global_transform.origin
 
-func _ready():
-	if player != null:
-		# Calculate the initial offset based on the camera's position in the editor
-		camera_offset = global_transform.origin - player.global_transform.origin
+		# Calculate the camera position on the line extending from the center to the player
+		tower_center.y = player_position.y
+		var direction_to_player = (player_position - tower_center).normalized()
+		global_transform.origin = player_position + direction_to_player * orbit_distance + Vector3(0, height_offset, 0)
 
-#func _process(delta):
-	#if player != null:
-		## Get the target position (player position + offset)
-		#var target_position = player.global_transform.origin + camera_offset
-		#
-		## Smoothly move the camera towards the target position using lerp
-		#global_transform.origin = global_transform.origin.lerp(target_position, smooth_speed * delta)
-		#
-		## Smoothly rotate the camera to look at the player
-		#var current_rotation = global_transform.basis
-		#var target_rotation = (player.global_transform.origin - global_transform.origin).normalized()
-#
-		## Apply the rotation smoothly
-		#look_at(player.global_transform.origin, Vector3.UP)
+		# Make the camera look at the player
+		look_at(player_position, Vector3.UP)

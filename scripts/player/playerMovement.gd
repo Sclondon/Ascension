@@ -2,8 +2,11 @@ extends RigidBody3D
 
 @export var speed: float = 10.0
 @export var jump_strength: float = 20.0
+@export var death_plane = -20
 
 @export var camera: Camera3D
+@export var spawnPos: Node3D
+
 var is_moving: bool = false
 var last_mouse_position: Vector2
 
@@ -11,7 +14,7 @@ var last_mouse_position: Vector2
 var height_label: Label
 
 func _ready():
-	$RayCast3D.enabled = true  # Ensure RayCast3D is enable
+	$RayCast3D.enabled = true  # Ensure RayCast3D is enabled
 	
 	height_label = get_node("/root/main/CanvasLayer/Label")  # Adjust path to match your scene
 	if height_label == null:
@@ -30,14 +33,12 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.is_pressed():
-				# Check for custom jump action
+			# Check for custom jump action
 			if $RayCast3D.is_colliding():
 				apply_central_impulse(Vector3(0, jump_strength, 0))
 			is_moving = true
 		elif event.is_released():
 			is_moving = false
-			
-
 
 func _process(delta: float) -> void:
 	if is_moving:
@@ -49,6 +50,12 @@ func _process(delta: float) -> void:
 	# Update the label text with the player's current height
 	if height_label != null:
 		height_label.text = "Height: " + str(round(current_height))
+		
+	if current_height < death_plane:
+		global_transform = spawnPos.transform
+		linear_velocity.x = 0
+		linear_velocity.y = 0
+		linear_velocity.z = 0
 
 func follow_mouse() -> void:
 	var mouse_position = get_viewport().get_mouse_position()
@@ -65,5 +72,5 @@ func follow_mouse() -> void:
 
 	# Set the linear velocity directly based on the movement direction
 	linear_velocity.x = move_direction.x * speed
-	linear_velocity.z = -move_direction.z * speed
+	linear_velocity.z = move_direction.z * speed
 	# Keep Y velocity unchanged (e.g., jumping)
