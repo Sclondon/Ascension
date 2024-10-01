@@ -6,9 +6,11 @@ extends RigidBody3D
 
 @export var camera: Camera3D
 @export var spawnPos: Node3D
+@export var tower_position: Vector3  # Set this to the tower's position in the scene
 
-var is_moving: bool = false
+var is_swiping: bool = false
 var last_mouse_position: Vector2
+
 
 # Reference to the height label
 var height_label: Label
@@ -36,13 +38,13 @@ func _input(event: InputEvent) -> void:
 			# Check for custom jump action
 			if $RayCast3D.is_colliding():
 				apply_central_impulse(Vector3(0, jump_strength, 0))
-			is_moving = true
+			is_swiping = true
 		elif event.is_released():
-			is_moving = false
+			is_swiping = false
 
 func _process(delta: float) -> void:
-	if is_moving:
-		follow_mouse()
+	if is_swiping:
+		swipe()
 	
 	# Get the player's height (y position)
 	var current_height = global_transform.origin.y  # Y position represents the player's height
@@ -57,20 +59,37 @@ func _process(delta: float) -> void:
 		linear_velocity.y = 0
 		linear_velocity.z = 0
 
-func follow_mouse() -> void:
+func _physics_process(delta: float) -> void:
+	look_at_tower()
+
+func look_at_tower() -> void:
+	var tower_position = Vector3.ZERO
+	tower_position.y = global_transform.origin.y
+	var player_position = global_transform.origin
+	
+	# Calculate the direction to the tower's center
+	var direction_to_tower = (tower_position - player_position).normalized()
+	
+	# Set player's rotation to face the tower, keeping the y-axis fixed
+	var look_rotation = Vector3(0, atan2(direction_to_tower.x, direction_to_tower.z), 0)
+	set_angular_velocity(Vector3.ZERO)  # Prevent rotation through physics
+	set_rotation_degrees(look_rotation * (180 / PI))  # Rotate the player
+
+func swipe() -> void:
 	var mouse_position = get_viewport().get_mouse_position()
-	var mouse_movement = mouse_position - last_mouse_position  # Calculate the change in mouse position
-	last_mouse_position = mouse_position  # Update the last mouse position
+	var swipe_distance = mouse_position - last_mouse_position  # Calculate swipe distance
+	last_mouse_position = mouse_position  # Update for continuous swiping
 
-	# Access camera transform properly
-	var camera_transform = camera.global_transform
-	var right_direction = camera_transform.basis.x.normalized()
-	var forward_direction = -camera_transform.basis.z.normalized()  # In Godot, Z is forward, but we want to move in the direction we face
+	# Calculate movement direction based on swipe (in local space)
+	var player_transform = global_transform
 
-	# Calculate movement direction based on mouse movement in camera space
-	var move_direction = (right_direction * mouse_movement.x + forward_direction * mouse_movement.y).normalized()
+	# Transform the swipe direction into the player's local space
+	var right_direction = player_transform.basis.x.normalized()
+	var forward_direction = player_transform.basis.z.normalized()  # Forward direction based on where the player is looking
 
-	# Set the linear velocity directly based on the movement direction
-	linear_velocity.x = move_direction.x * speed
+	# Adjust movement direction based on swipe distance
+	var move_direction = (right_direction * swipe_distance.x + forward_direction * swipe_distance.y).normalized()
+
+	# Apply movement in local space
+	linear_velocity.x = -move_direction.x * speed
 	linear_velocity.z = -move_direction.z * speed
-	# Keep Y velocity unchanged (e.g., jumping)
