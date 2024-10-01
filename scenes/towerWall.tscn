@@ -3,10 +3,11 @@
 [ext_resource type="Material" uid="uid://cedljbkpxb41x" path="res://materials/brickwall_mat.tres" id="1_nix1x"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_y1j0e"]
-size = Vector3(7, 10, 1)
+size = Vector3(5, 7, 1)
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_k7u2f"]
 material = ExtResource("1_nix1x")
+size = Vector2(1.425, 1.4)
 
 [node name="TowerWall" type="StaticBody3D"]
 

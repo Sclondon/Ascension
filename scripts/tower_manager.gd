@@ -19,8 +19,8 @@ var tower_sections: Array = []
 
 func _ready():
 	# Initially generate a few tower sections
-	for i in range(max_sections-1):
-		add_new_section((-i-1) * (section_height/2))
+	for i in range(max_sections):
+		add_new_section(i * -section_height)
 		
 	var tower_spawner = get_parent()
 	if tower_spawner:
@@ -35,8 +35,9 @@ func _process(delta):
 		add_new_section(get_last_section_height())
 
 	# Remove old sections if far below the player
-	if tower_sections.size() > max_sections and tower_sections[0].global_transform.origin.y < player.global_transform.origin.y - 2 * spawn_distance:
+	if tower_sections.size() > max_sections and tower_sections[0].global_transform.origin.y < player.global_transform.origin.y - spawn_distance:
 		remove_old_section()
+		
 
 func add_new_section(height: float):
 	var angle_step = TAU / num_sides

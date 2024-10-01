@@ -72,5 +72,5 @@ func follow_mouse() -> void:
 
 	# Set the linear velocity directly based on the movement direction
 	linear_velocity.x = move_direction.x * speed
-	linear_velocity.z = move_direction.z * speed
+	linear_velocity.z = -move_direction.z * speed
 	# Keep Y velocity unchanged (e.g., jumping)
