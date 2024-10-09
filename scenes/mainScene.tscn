@@ -1,4 +1,4 @@
-[gd_scene load_steps=22 format=3 uid="uid://bk1gddcc2roeo"]
+[gd_scene load_steps=20 format=3 uid="uid://bk1gddcc2roeo"]
 
 [ext_resource type="Script" path="res://scripts/player/playerMovement.gd" id="1_s43xl"]
 [ext_resource type="SpriteFrames" uid="uid://blfehxd63n3mo" path="res://animations/player_idle_SF.tres" id="3_f168y"]
@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://scripts/player/playerAnimator.gd" id="4_stb1u"]
 [ext_resource type="Material" uid="uid://c8foud2c0grvr" path="res://materials/brickwallsmall_mat.tres" id="5_55inp"]
 [ext_resource type="SpriteFrames" uid="uid://ddcv26u5a8k62" path="res://animations/player_jump_SF.tres" id="5_f3p5r"]
+[ext_resource type="SpriteFrames" uid="uid://cejyluw7sig56" path="res://animations/player_fall.tres" id="6_6eyop"]
 [ext_resource type="Material" uid="uid://bxnxm2o0sexx4" path="res://materials/cloudmat.tres" id="7_u1pia"]
 [ext_resource type="Script" path="res://scripts/tower_manager.gd" id="8_s7y8x"]
 [ext_resource type="PackedScene" uid="uid://c7dntl6vclued" path="res://scenes/towerWall.tscn" id="9_2h50k"]
@@ -19,18 +20,6 @@ font_color = Color(0.720802, 0, 0.238248, 1)
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_snqhs"]
 radius = 0.401597
 height = 1.21503
-
-[sub_resource type="Animation" id="Animation_g48rw"]
-resource_name = "player_idle"
-
-[sub_resource type="Animation" id="Animation_7624h"]
-resource_name = "player_jump"
-
-[sub_resource type="AnimationLibrary" id="AnimationLibrary_pavcp"]
-_data = {
-"player_idle": SubResource("Animation_g48rw"),
-"player_jump": SubResource("Animation_7624h")
-}
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1f4mq"]
 sky_top_color = Color(0.135322, 0.171193, 0.44485, 1)
@@ -105,14 +94,14 @@ shape = SubResource("CapsuleShape3D_snqhs")
 target_position = Vector3(0, -0.6, 0)
 
 [node name="SpotLight3D" type="SpotLight3D" parent="Player"]
-transform = Transform3D(1, 0, 0, 0, 0.180056, 0.983656, 0, -0.983656, 0.180056, 0, 1.15417, 0.169193)
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 1, 0)
 light_volumetric_fog_energy = 0.0
 shadow_enabled = true
-spot_range = 6.59514
+spot_range = 8.236
 spot_angle = 11.4286
 spot_angle_attenuation = 0.164938
 
-[node name="AnimatedSprite3D" type="AnimatedSprite3D" parent="Player"]
+[node name="AnimatedSprite3D" type="AnimatedSprite3D" parent="Player" node_paths=PackedStringArray("camera")]
 transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, 0, 0)
 pixel_size = 0.035
 texture_filter = 0
@@ -120,13 +109,10 @@ sprite_frames = ExtResource("5_f3p5r")
 autoplay = "default"
 speed_scale = 1.5
 script = ExtResource("4_stb1u")
+camera = NodePath("../../Camera3D")
 idle = ExtResource("3_f168y")
 jump = ExtResource("5_f3p5r")
-
-[node name="AnimationPlayer" type="AnimationPlayer" parent="Player"]
-libraries = {
-"": SubResource("AnimationLibrary_pavcp")
-}
+falling = ExtResource("6_6eyop")
 
 [node name="platform" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0706863, 1.34433, 9.75165)
