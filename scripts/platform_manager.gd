@@ -56,7 +56,7 @@ func _get_random_angle() -> float:
 
 func _calculate_platform_position(angle: float, height: float) -> Vector3:
 	# Calculate position on the outer edge of the tower
-	var outer_radius = tower_radius + 0.5  # Adjust the radius to be just outside the tower
+	var outer_radius = tower_radius + (randf() ) # Adjust the radius to be just outside the tower
 	var x_pos = cos(angle) * outer_radius
 	var z_pos = sin(angle) * outer_radius
 	return Vector3(x_pos, height, z_pos)

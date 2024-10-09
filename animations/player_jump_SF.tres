@@ -1,0 +1,39 @@
+[gd_resource type="SpriteFrames" load_steps=6 format=3 uid="uid://ddcv26u5a8k62"]
+
+[ext_resource type="Texture2D" uid="uid://bveicx784ochy" path="res://images/crowFlap.png" id="1_1spxj"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_qhnt4"]
+atlas = ExtResource("1_1spxj")
+region = Rect2(0, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_salt5"]
+atlas = ExtResource("1_1spxj")
+region = Rect2(32, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_2lcrn"]
+atlas = ExtResource("1_1spxj")
+region = Rect2(64, 0, 32, 32)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_kjl2y"]
+atlas = ExtResource("1_1spxj")
+region = Rect2(96, 0, 32, 32)
+
+[resource]
+animations = [{
+"frames": [{
+"duration": 0.5,
+"texture": SubResource("AtlasTexture_qhnt4")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_salt5")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_2lcrn")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_kjl2y")
+}],
+"loop": true,
+"name": &"default",
+"speed": 5.0
+}]
