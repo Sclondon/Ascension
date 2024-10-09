@@ -1,6 +1,6 @@
 extends Node3D
 
-@export var platform_scene: PackedScene
+@export var platform_varients: Array[PackedScene] = []
 @export var tower_segment_height: float = 10.0  # Height of each tower segment
 @export var platform_height_offset: float = 5.0  # Maximum height offset from the segment
 @export var tower_radius: float = 5.0
@@ -56,7 +56,7 @@ func _get_random_angle() -> float:
 
 func _calculate_platform_position(angle: float, height: float) -> Vector3:
 	# Calculate position on the outer edge of the tower
-	var outer_radius = tower_radius + (randf() ) # Adjust the radius to be just outside the tower
+	var outer_radius = tower_radius + (randf() * 1.5) # Adjust the radius to be just outside the tower
 	var x_pos = cos(angle) * outer_radius
 	var z_pos = sin(angle) * outer_radius
 	return Vector3(x_pos, height, z_pos)
@@ -73,7 +73,8 @@ func _is_position_valid(new_position: Vector3) -> bool:
 	return true  # Position is valid
 
 func spawn_platform(position: Vector3):
-	var platform = platform_scene.instantiate()
+	var random_scene = platform_varients[randi_range(0, platform_varients.size() - 1)]  # Pick a random platform
+	var platform = random_scene.instantiate()  # Instance the selected platform scene
 
 	platform.global_transform.origin = position
 	# Calculate the angle for rotation using atan2 for Y-axis alignment

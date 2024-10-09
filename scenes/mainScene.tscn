@@ -1,4 +1,4 @@
-[gd_scene load_steps=20 format=3 uid="uid://bk1gddcc2roeo"]
+[gd_scene load_steps=22 format=3 uid="uid://bk1gddcc2roeo"]
 
 [ext_resource type="Script" path="res://scripts/player/playerMovement.gd" id="1_s43xl"]
 [ext_resource type="SpriteFrames" uid="uid://blfehxd63n3mo" path="res://animations/player_idle_SF.tres" id="3_f168y"]
@@ -7,19 +7,17 @@
 [ext_resource type="Material" uid="uid://c8foud2c0grvr" path="res://materials/brickwallsmall_mat.tres" id="5_55inp"]
 [ext_resource type="SpriteFrames" uid="uid://ddcv26u5a8k62" path="res://animations/player_jump_SF.tres" id="5_f3p5r"]
 [ext_resource type="SpriteFrames" uid="uid://cejyluw7sig56" path="res://animations/player_fall.tres" id="6_6eyop"]
-[ext_resource type="Material" uid="uid://bxnxm2o0sexx4" path="res://materials/cloudmat.tres" id="7_u1pia"]
+[ext_resource type="Material" uid="uid://bxnxm2o0sexx4" path="res://materials/farcloudmat.tres" id="7_u1pia"]
 [ext_resource type="Script" path="res://scripts/tower_manager.gd" id="8_s7y8x"]
 [ext_resource type="PackedScene" uid="uid://c7dntl6vclued" path="res://scenes/towerWall.tscn" id="9_2h50k"]
 [ext_resource type="Script" path="res://scripts/platform_manager.gd" id="9_c2mdi"]
-[ext_resource type="PackedScene" uid="uid://b5eatgtq7pnbi" path="res://scenes/basicPlatform.tscn" id="10_amj47"]
+[ext_resource type="PackedScene" uid="uid://c5ctlhlnkjhka" path="res://scenes/bigbalconyPlatform.tscn" id="11_h7x5g"]
+[ext_resource type="PackedScene" uid="uid://dbwsa6al17fu5" path="res://scenes/balconyPlatform.tscn" id="13_fsuam"]
+[ext_resource type="Material" uid="uid://ko2ptsn71gct" path="res://materials/densecloudmat.tres" id="14_mons0"]
 
 [sub_resource type="LabelSettings" id="LabelSettings_r2uiu"]
 font_size = 64
 font_color = Color(0.720802, 0, 0.238248, 1)
-
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_snqhs"]
-radius = 0.401597
-height = 1.21503
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1f4mq"]
 sky_top_color = Color(0.135322, 0.171193, 0.44485, 1)
@@ -38,17 +36,30 @@ background_energy_multiplier = 1.5
 sky = SubResource("Sky_b61ug")
 sky_custom_fov = 141.7
 
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_snqhs"]
+radius = 0.401597
+height = 1.21503
+
 [sub_resource type="PlaneMesh" id="PlaneMesh_0tij6"]
 material = ExtResource("7_u1pia")
+size = Vector2(5000, 7000)
 
-[sub_resource type="SphereMesh" id="SphereMesh_226dk"]
-lightmap_size_hint = Vector2i(3143, 1572)
-material = ExtResource("7_u1pia")
-radius = 100.0
-height = 200.0
-rings = 64
+[sub_resource type="CylinderMesh" id="CylinderMesh_7uls1"]
+material = ExtResource("14_mons0")
+top_radius = 500.0
+bottom_radius = 500.0
+height = 500.0
 
 [node name="main" type="Node3D"]
+
+[node name="Camera3D" type="Camera3D" parent="." node_paths=PackedStringArray("player")]
+transform = Transform3D(0.998975, -0.0219185, 0.0396169, 2.99803e-08, 0.875009, 0.484107, -0.045276, -0.483611, 0.874111, 0, 0, 0)
+fov = 70.0
+near = 0.293
+script = ExtResource("3_vkxb3")
+orbit_distance = 6.0
+height_offset = 3.5
+player = NodePath("../Player")
 
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
 
@@ -61,21 +72,15 @@ rotation = -0.263545
 scale = Vector2(0.834514, 0.686633)
 label_settings = SubResource("LabelSettings_r2uiu")
 
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_u8v43")
+
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.838528, 0.527971, -0.134602, -0.111711, 0.408385, 0.905948, 0.533284, -0.744626, 0.401422, 0, 5.26254, 13.8096)
 shadow_blur = 9.9
 
-[node name="Camera3D" type="Camera3D" parent="." node_paths=PackedStringArray("player")]
-transform = Transform3D(0.998975, -0.0219184, 0.0396168, 2.99803e-08, 0.875009, 0.484107, -0.045276, -0.483611, 0.874111, 0.131118, 5.57433, 16.2386)
-fov = 70.0
-near = 0.293
-script = ExtResource("3_vkxb3")
-orbit_distance = 6.0
-height_offset = 3.5
-player = NodePath("../Player")
-
 [node name="Player" type="RigidBody3D" parent="." node_paths=PackedStringArray("camera", "spawnPos")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.53236, 9.41026)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.64216, 1, 4.52579)
 lock_rotation = true
 continuous_cd = true
 contact_monitor = true
@@ -114,42 +119,21 @@ idle = ExtResource("3_f168y")
 jump = ExtResource("5_f3p5r")
 falling = ExtResource("6_6eyop")
 
-[node name="platform" type="CSGBox3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0706863, 1.34433, 9.75165)
-use_collision = true
-size = Vector3(5, 1, 5)
-material = ExtResource("5_55inp")
+[node name="bg" type="MeshInstance3D" parent="Player"]
+transform = Transform3D(0.00549746, 1.81608e-08, -0.999985, 0.677033, 0.0551958, 0.00372219, 0.735932, -0.0507783, 0.00404561, -5.19753e-05, -956.723, 1635.96)
+mesh = SubResource("PlaneMesh_0tij6")
+skeleton = NodePath("../..")
+
+[node name="bg2" type="MeshInstance3D" parent="Player/bg"]
+transform = Transform3D(0.605706, -0.00196363, -0.795258, 0.692749, 0.998627, 0.0892701, 0.793991, -0.00340304, 0.606234, -138.241, 7711.11, 79.0469)
+mesh = SubResource("PlaneMesh_0tij6")
+skeleton = NodePath("../../..")
 
 [node name="SpawnPoint" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.112242, 3.21551, 10.1388)
+transform = Transform3D(0.5, 0, 0.866025, 0, 1, 0, -0.866025, 0, 0.5, -2.692, 1, 4.44)
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
-environment = SubResource("Environment_u8v43")
-
-[node name="BottomCloudLayer2" type="MeshInstance3D" parent="."]
-transform = Transform3D(931.208, 0, -1174.37, 0, 0.0750981, 0, 1250.36, 0, 874.613, 0, 10, 0)
-visible = false
-mesh = SubResource("PlaneMesh_0tij6")
-
-[node name="BottomCloudLayer3" type="MeshInstance3D" parent="."]
-transform = Transform3D(8.57111, 0, -1464.25, 0, 0.0750981, 0, 1559, 0, 8.05023, 0, -10, 0)
-visible = false
-mesh = SubResource("PlaneMesh_0tij6")
-
-[node name="BottomCloudLayer" type="MeshInstance3D" parent="."]
-transform = Transform3D(1559.02, 0, 0, 0, 0.0750981, 0, 0, 0, 1464.27, 0, -40, 0)
-visible = false
-mesh = SubResource("PlaneMesh_0tij6")
-
-[node name="cloudbg" type="MeshInstance3D" parent="."]
-transform = Transform3D(-4.37114e-08, -1, 0, 0.99889, -4.36629e-08, -0.0471064, 0.0471065, -2.05909e-09, 0.99889, -0.102555, -37.733, -112.874)
-visible = false
-mesh = SubResource("SphereMesh_226dk")
-
-[node name="cloudbg2" type="MeshInstance3D" parent="."]
-transform = Transform3D(-4.37114e-08, -1, 0, 0.99889, -4.36629e-08, -0.0471064, 0.0471065, -2.05909e-09, 0.99889, -0.102555, 117.856, 129.578)
-visible = false
-mesh = SubResource("SphereMesh_226dk")
+[node name="SpawnPlatform" parent="SpawnPoint" instance=ExtResource("13_fsuam")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1, 0)
 
 [node name="TowerManager" type="Node3D" parent="." node_paths=PackedStringArray("player", "platform_spawner")]
 script = ExtResource("8_s7y8x")
@@ -163,17 +147,75 @@ platform_spawner = NodePath("PlatformManager")
 
 [node name="PlatformManager" type="Node3D" parent="TowerManager" node_paths=PackedStringArray("player")]
 script = ExtResource("9_c2mdi")
-platform_scene = ExtResource("10_amj47")
+platform_varients = Array[PackedScene]([ExtResource("13_fsuam"), ExtResource("11_h7x5g")])
 tower_segment_height = 7.0
 platform_height_offset = 7.0
-tower_radius = 4.5
-max_platforms_per_segment = 40
-spawn_probability = 0.9
-min_height_between_platforms = 7.0
+tower_radius = 3.75
+max_platforms_per_segment = 100
+spawn_probability = 1.0
+min_height_between_platforms = 8.0
 remove_threshold = 50.0
 player = NodePath("../../Player")
+
+[node name="DecorationManager" type="Node3D" parent="TowerManager"]
 
 [node name="platform2" type="CSGBox3D" parent="TowerManager"]
 use_collision = true
 size = Vector3(5, 1, 5)
 material = ExtResource("5_55inp")
+
+[node name="cloudLayers" type="Node3D" parent="."]
+
+[node name="-30m" type="MeshInstance3D" parent="cloudLayers"]
+transform = Transform3D(-3.09086e-08, -0.707107, 0.707107, 1, -4.37114e-08, 0, 3.09086e-08, 0.707107, 0.707107, 0, -530, 0)
+mesh = SubResource("CylinderMesh_7uls1")
+
+[node name="-10m2" type="MeshInstance3D" parent="cloudLayers/-30m"]
+transform = Transform3D(1, -4.37114e-08, -4.37114e-08, -4.37114e-08, -4.37114e-08, -1, 4.37114e-08, 1, -4.37114e-08, 0, -5, 0)
+mesh = SubResource("CylinderMesh_7uls1")
+skeleton = NodePath("../..")
+
+[node name="-10m" type="MeshInstance3D" parent="cloudLayers"]
+transform = Transform3D(-4.37114e-08, -1, 0, 1, -4.37114e-08, 0, 0, 0, 1, 0, -510, 0)
+mesh = SubResource("CylinderMesh_7uls1")
+
+[node name="-10m2" type="MeshInstance3D" parent="cloudLayers/-10m"]
+transform = Transform3D(1, -4.37114e-08, -4.37114e-08, -4.37114e-08, -4.37114e-08, -1, 4.37114e-08, 1, -4.37114e-08, 0, -5, 0)
+mesh = SubResource("CylinderMesh_7uls1")
+skeleton = NodePath("../..")
+
+[node name="25m" type="MeshInstance3D" parent="cloudLayers"]
+transform = Transform3D(-3.78552e-08, -0.866025, 0.5, 1, -4.37114e-08, 0, 2.18557e-08, 0.5, 0.866025, 0, -475, 0)
+mesh = SubResource("CylinderMesh_7uls1")
+
+[node name="-10m2" type="MeshInstance3D" parent="cloudLayers/25m"]
+transform = Transform3D(1, -4.37114e-08, -4.37114e-08, -4.37114e-08, -4.37114e-08, -1, 4.37114e-08, 1, -4.37114e-08, 0, -5, 0)
+mesh = SubResource("CylinderMesh_7uls1")
+skeleton = NodePath("../..")
+
+[node name="50m" type="MeshInstance3D" parent="cloudLayers"]
+transform = Transform3D(-2.18557e-08, -0.5, 0.866025, 1, -4.37114e-08, 0, 3.78552e-08, 0.866025, 0.5, 0, -450, 0)
+mesh = SubResource("CylinderMesh_7uls1")
+
+[node name="-10m2" type="MeshInstance3D" parent="cloudLayers/50m"]
+transform = Transform3D(1, -4.37114e-08, -4.37114e-08, -4.37114e-08, -4.37114e-08, -1, 4.37114e-08, 1, -4.37114e-08, 0, -5, 0)
+mesh = SubResource("CylinderMesh_7uls1")
+skeleton = NodePath("../..")
+
+[node name="100m" type="MeshInstance3D" parent="cloudLayers"]
+transform = Transform3D(1.91069e-15, 4.37114e-08, 1, 1, -4.37114e-08, 0, 4.37114e-08, 1, -4.37114e-08, 0, -400, 0)
+mesh = SubResource("CylinderMesh_7uls1")
+
+[node name="-10m2" type="MeshInstance3D" parent="cloudLayers/100m"]
+transform = Transform3D(1, -4.37114e-08, -4.37114e-08, -4.37114e-08, -4.37114e-08, -1, 4.37114e-08, 1, -4.37114e-08, 0, -5, 0)
+mesh = SubResource("CylinderMesh_7uls1")
+skeleton = NodePath("../..")
+
+[node name="250m" type="MeshInstance3D" parent="cloudLayers"]
+transform = Transform3D(7.5904e-09, 0.173648, 0.984808, 1, -4.37114e-08, 0, 4.30473e-08, 0.984808, -0.173648, 0, -300, 0)
+mesh = SubResource("CylinderMesh_7uls1")
+
+[node name="-10m2" type="MeshInstance3D" parent="cloudLayers/250m"]
+transform = Transform3D(1, -4.37114e-08, -4.37114e-08, -4.37114e-08, -4.37114e-08, -1, 4.37114e-08, 1, -4.37114e-08, 0, -5, 0)
+mesh = SubResource("CylinderMesh_7uls1")
+skeleton = NodePath("../..")
