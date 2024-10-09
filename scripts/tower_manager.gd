@@ -27,6 +27,10 @@ func _generate_initial_tower_sections():
 	for tower_section in tower_sections:
 		tower_section.call_deferred("queue_free")
 	
+	for platform in platform_spawner.platforms:
+		platform.queue_free()
+	platform_spawner.platforms.clear()
+	
 	# Initially generate a few tower sections
 	for i in range(max_sections):
 		add_new_section(i * -section_height)
