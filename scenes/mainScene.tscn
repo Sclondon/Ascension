@@ -6,7 +6,7 @@
 [ext_resource type="Script" path="res://scripts/player/playerAnimator.gd" id="4_stb1u"]
 [ext_resource type="Material" uid="uid://c8foud2c0grvr" path="res://materials/brickwallsmall_mat.tres" id="5_55inp"]
 [ext_resource type="SpriteFrames" uid="uid://ddcv26u5a8k62" path="res://animations/player_jump_SF.tres" id="5_f3p5r"]
-[ext_resource type="SpriteFrames" uid="uid://cejyluw7sig56" path="res://animations/player_fall.tres" id="6_6eyop"]
+[ext_resource type="SpriteFrames" uid="uid://cll782o6tfq3p" path="res://animations/player_fall.tres" id="6_6eyop"]
 [ext_resource type="Material" uid="uid://bxnxm2o0sexx4" path="res://materials/cloudmat.tres" id="7_u1pia"]
 [ext_resource type="Script" path="res://scripts/tower_manager.gd" id="8_s7y8x"]
 [ext_resource type="PackedScene" uid="uid://c7dntl6vclued" path="res://scenes/towerWall.tscn" id="9_2h50k"]
@@ -165,11 +165,11 @@ platform_spawner = NodePath("PlatformManager")
 script = ExtResource("9_c2mdi")
 platform_scene = ExtResource("10_amj47")
 tower_segment_height = 7.0
-platform_height_offset = 2.5
+platform_height_offset = 7.0
 tower_radius = 4.5
 max_platforms_per_segment = 40
 spawn_probability = 0.9
-min_height_between_platforms = 2.0
+min_height_between_platforms = 7.0
 remove_threshold = 50.0
 player = NodePath("../../Player")
 

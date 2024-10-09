@@ -18,24 +18,29 @@ signal new_section_added(height)
 var tower_sections: Array = []
 
 func _ready():
+	Global.player_died.connect(_generate_initial_tower_sections)
+	_generate_initial_tower_sections()
+
+func _generate_initial_tower_sections():
+	tower_sections = tower_sections.filter(is_instance_valid)
+	# Cleanup any existing towers since we're restarting
+	for tower_section in tower_sections:
+		tower_section.call_deferred("queue_free")
+	
 	# Initially generate a few tower sections
 	for i in range(max_sections):
 		add_new_section(i * -section_height)
-		
-	var tower_spawner = get_parent()
-	if tower_spawner:
-		tower_spawner.connect("new_section_added", Callable(self, "_on_new_section_added"))
-		print("Signal connected")
-	else:
-		print("TowerSpawner not found")
 
 func _process(delta):
 	# Check the player's height and spawn new sections if needed
 	if player.global_transform.origin.y > get_last_section_height() - spawn_distance:
 		add_new_section(get_last_section_height())
 
+	
+	tower_sections = tower_sections.filter(is_instance_valid)
 	# Remove old sections if far below the player
 	if tower_sections.size() > max_sections and tower_sections[0].global_transform.origin.y < player.global_transform.origin.y - spawn_distance:
+		Global.death_floor_changed.emit(player.global_transform.origin.y - spawn_distance)
 		remove_old_section()
 		
 
@@ -47,7 +52,7 @@ func add_new_section(height: float):
 		var z_pos = sin(angle) * tower_radius
 
 		var wall_segment = wall_segment_scene.instantiate()
-		wall_segment.global_transform.origin = Vector3(x_pos, height, z_pos)
+		wall_segment.position = Vector3(x_pos, height, z_pos)
 		wall_segment.look_at_from_position(Vector3(x_pos, height, z_pos), Vector3(0, height, 0), Vector3.UP)
 
 		add_child(wall_segment)
