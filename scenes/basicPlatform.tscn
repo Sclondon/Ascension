@@ -5,6 +5,6 @@
 [node name="BasicPlatform" type="Node3D"]
 
 [node name="CSGBox3D" type="CSGBox3D" parent="."]
-transform = Transform3D(3, 0, 0, 0, 1, 0, 0, 0, 3, 0, 0, 0)
+transform = Transform3D(3, 0, 0, 0, 1, 0, 0, 0, 3, 0, -9.53674e-07, 0)
 use_collision = true
 material = ExtResource("1_l4rpk")

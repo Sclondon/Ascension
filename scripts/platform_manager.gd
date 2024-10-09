@@ -7,7 +7,7 @@ extends Node3D
 @export var max_platforms_per_segment: int = 5  # Maximum number of platforms to spawn per segment
 @export var spawn_probability: float = 0.5  # Probability of spawning each platform (0.0 to 1.0)
 @export var number_of_sides: int = 6  # Number of sides of the tower (hexagon = 6, octagon = 8, etc.)
-@export var min_height_between_platforms: float = 1.0  # Minimum distance between platforms
+@export var min_height_between_platforms: float = 15.0  # Minimum distance between platforms
 @export var remove_threshold: float = 20.0  # Threshold for removing platforms below the player
 @export var player: Node3D                # Reference to the player
 
@@ -64,11 +64,12 @@ func _calculate_platform_position(angle: float, height: float) -> Vector3:
 func _is_position_valid(new_position: Vector3) -> bool:
 	if new_position.y < 0:
 		return false
-	
+
 	for platform in platformsCollisionCheck:
 		# Calculate the distance between the new position and existing platforms
 		if platform.global_transform.origin.distance_to(new_position) < min_height_between_platforms:
 			return false  # Position is too close to another platform
+
 	return true  # Position is valid
 
 func spawn_platform(position: Vector3):

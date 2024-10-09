@@ -15,8 +15,11 @@ var last_mouse_position: Vector2
 # Reference to the height label
 var height_label: Label
 
+
 func _ready():
 	$RayCast3D.enabled = true  # Ensure RayCast3D is enabled
+	
+	Global.death_floor_changed.connect(_on_death_floor_changed)
 	
 	height_label = get_node("/root/main/CanvasLayer/Label")  # Adjust path to match your scene
 	if height_label == null:
@@ -54,10 +57,18 @@ func _process(delta: float) -> void:
 		height_label.text = "Height: " + str(round(current_height))
 		
 	if current_height < death_plane:
+		Global.player_died.emit()
+		# Send back to Scareathon website
+		JavaScriptBridge.eval("window.parent.postMessage({ type: 'PLAYER_DIED', score: " + str(round(global_transform.origin.y)) + " }, '*')", true)
+		
+		death_plane = -20
 		global_transform = spawnPos.transform
 		linear_velocity.x = 0
 		linear_velocity.y = 0
 		linear_velocity.z = 0
+
+func _on_death_floor_changed(new_value: float) -> void:
+	death_plane = new_value 
 
 func _physics_process(delta: float) -> void:
 	look_at_tower()

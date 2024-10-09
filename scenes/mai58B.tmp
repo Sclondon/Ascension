@@ -1,0 +1,193 @@
+[gd_scene load_steps=22 format=3 uid="uid://bk1gddcc2roeo"]
+
+[ext_resource type="Script" path="res://scripts/player/playerMovement.gd" id="1_s43xl"]
+[ext_resource type="SpriteFrames" uid="uid://blfehxd63n3mo" path="res://animations/player_idle_SF.tres" id="3_f168y"]
+[ext_resource type="Script" path="res://scripts/mainCam.gd" id="3_vkxb3"]
+[ext_resource type="Script" path="res://scripts/player/playerAnimator.gd" id="4_stb1u"]
+[ext_resource type="Material" uid="uid://c8foud2c0grvr" path="res://materials/brickwallsmall_mat.tres" id="5_55inp"]
+[ext_resource type="SpriteFrames" uid="uid://ddcv26u5a8k62" path="res://animations/player_jump_SF.tres" id="5_f3p5r"]
+[ext_resource type="Material" uid="uid://bxnxm2o0sexx4" path="res://materials/cloudmat.tres" id="7_u1pia"]
+[ext_resource type="Script" path="res://scripts/tower_manager.gd" id="8_s7y8x"]
+[ext_resource type="PackedScene" uid="uid://c7dntl6vclued" path="res://scenes/towerWall.tscn" id="9_2h50k"]
+[ext_resource type="Script" path="res://scripts/platform_manager.gd" id="9_c2mdi"]
+[ext_resource type="PackedScene" uid="uid://b5eatgtq7pnbi" path="res://scenes/basicPlatform.tscn" id="10_amj47"]
+
+[sub_resource type="LabelSettings" id="LabelSettings_r2uiu"]
+font_size = 64
+font_color = Color(0.720802, 0, 0.238248, 1)
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_snqhs"]
+radius = 0.401597
+height = 1.21503
+
+[sub_resource type="Animation" id="Animation_g48rw"]
+resource_name = "player_idle"
+
+[sub_resource type="Animation" id="Animation_7624h"]
+resource_name = "player_jump"
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_pavcp"]
+_data = {
+"player_idle": SubResource("Animation_g48rw"),
+"player_jump": SubResource("Animation_7624h")
+}
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1f4mq"]
+sky_top_color = Color(0.135322, 0.171193, 0.44485, 1)
+sky_horizon_color = Color(0.764755, 0.325511, 0.237704, 1)
+sky_curve = 0.204906
+ground_bottom_color = Color(0.0374046, 0.0637393, 0.117509, 1)
+ground_horizon_color = Color(0.764706, 0.32549, 0.239216, 1)
+ground_curve = 0.203931
+
+[sub_resource type="Sky" id="Sky_b61ug"]
+sky_material = SubResource("ProceduralSkyMaterial_1f4mq")
+
+[sub_resource type="Environment" id="Environment_u8v43"]
+background_mode = 2
+background_energy_multiplier = 1.5
+sky = SubResource("Sky_b61ug")
+sky_custom_fov = 141.7
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_0tij6"]
+material = ExtResource("7_u1pia")
+
+[sub_resource type="SphereMesh" id="SphereMesh_226dk"]
+lightmap_size_hint = Vector2i(3143, 1572)
+material = ExtResource("7_u1pia")
+radius = 100.0
+height = 200.0
+rings = 64
+
+[node name="main" type="Node3D"]
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="Label" type="Label" parent="CanvasLayer"]
+offset_left = 23.0
+offset_top = 52.0
+offset_right = 63.0
+offset_bottom = 75.0
+rotation = -0.263545
+scale = Vector2(0.834514, 0.686633)
+label_settings = SubResource("LabelSettings_r2uiu")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.838528, 0.527971, -0.134602, -0.111711, 0.408385, 0.905948, 0.533284, -0.744626, 0.401422, 0, 5.26254, 13.8096)
+shadow_blur = 9.9
+
+[node name="Camera3D" type="Camera3D" parent="." node_paths=PackedStringArray("player")]
+transform = Transform3D(0.998975, -0.0219184, 0.0396168, 2.99803e-08, 0.875009, 0.484107, -0.045276, -0.483611, 0.874111, 0.131118, 5.57433, 16.2386)
+fov = 70.0
+near = 0.293
+script = ExtResource("3_vkxb3")
+orbit_distance = 6.0
+height_offset = 3.5
+player = NodePath("../Player")
+
+[node name="Player" type="RigidBody3D" parent="." node_paths=PackedStringArray("camera", "spawnPos")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.53236, 9.41026)
+lock_rotation = true
+continuous_cd = true
+contact_monitor = true
+script = ExtResource("1_s43xl")
+speed = 8.0
+jump_strength = 17.0
+death_plane = -25
+camera = NodePath("../Camera3D")
+spawnPos = NodePath("../SpawnPoint")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 0, 0.0874531, 0)
+shape = SubResource("CapsuleShape3D_snqhs")
+
+[node name="RayCast3D" type="RayCast3D" parent="Player"]
+target_position = Vector3(0, -0.6, 0)
+
+[node name="SpotLight3D" type="SpotLight3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 0.180056, 0.983656, 0, -0.983656, 0.180056, 0, 1.15417, 0.169193)
+light_volumetric_fog_energy = 0.0
+shadow_enabled = true
+spot_range = 6.59514
+spot_angle = 11.4286
+spot_angle_attenuation = 0.164938
+
+[node name="AnimatedSprite3D" type="AnimatedSprite3D" parent="Player"]
+transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, 0, 0)
+pixel_size = 0.035
+texture_filter = 0
+sprite_frames = ExtResource("5_f3p5r")
+autoplay = "default"
+speed_scale = 1.5
+script = ExtResource("4_stb1u")
+idle = ExtResource("3_f168y")
+jump = ExtResource("5_f3p5r")
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="Player"]
+libraries = {
+"": SubResource("AnimationLibrary_pavcp")
+}
+
+[node name="platform" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0706863, 1.34433, 9.75165)
+use_collision = true
+size = Vector3(5, 1, 5)
+material = ExtResource("5_55inp")
+
+[node name="SpawnPoint" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.112242, 3.21551, 10.1388)
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_u8v43")
+
+[node name="BottomCloudLayer2" type="MeshInstance3D" parent="."]
+transform = Transform3D(931.208, 0, -1174.37, 0, 0.0750981, 0, 1250.36, 0, 874.613, 0, 10, 0)
+visible = false
+mesh = SubResource("PlaneMesh_0tij6")
+
+[node name="BottomCloudLayer3" type="MeshInstance3D" parent="."]
+transform = Transform3D(8.57111, 0, -1464.25, 0, 0.0750981, 0, 1559, 0, 8.05023, 0, -10, 0)
+visible = false
+mesh = SubResource("PlaneMesh_0tij6")
+
+[node name="BottomCloudLayer" type="MeshInstance3D" parent="."]
+transform = Transform3D(1559.02, 0, 0, 0, 0.0750981, 0, 0, 0, 1464.27, 0, -40, 0)
+visible = false
+mesh = SubResource("PlaneMesh_0tij6")
+
+[node name="cloudbg" type="MeshInstance3D" parent="."]
+transform = Transform3D(-4.37114e-08, -1, 0, 0.99889, -4.36629e-08, -0.0471064, 0.0471065, -2.05909e-09, 0.99889, -0.102555, -37.733, -112.874)
+visible = false
+mesh = SubResource("SphereMesh_226dk")
+
+[node name="cloudbg2" type="MeshInstance3D" parent="."]
+transform = Transform3D(-4.37114e-08, -1, 0, 0.99889, -4.36629e-08, -0.0471064, 0.0471065, -2.05909e-09, 0.99889, -0.102555, 117.856, 129.578)
+visible = false
+mesh = SubResource("SphereMesh_226dk")
+
+[node name="TowerManager" type="Node3D" parent="." node_paths=PackedStringArray("player", "platform_spawner")]
+script = ExtResource("8_s7y8x")
+wall_segment_scene = ExtResource("9_2h50k")
+section_height = 7.0
+tower_radius = 3.75
+spawn_distance = 65.0
+max_sections = 10
+player = NodePath("../Player")
+platform_spawner = NodePath("PlatformManager")
+
+[node name="PlatformManager" type="Node3D" parent="TowerManager" node_paths=PackedStringArray("player")]
+script = ExtResource("9_c2mdi")
+platform_scene = ExtResource("10_amj47")
+tower_segment_height = 7.0
+platform_height_offset = 7.0
+tower_radius = 4.5
+max_platforms_per_segment = 10
+spawn_probability = 1.0
+min_height_between_platforms = 5.0
+remove_threshold = 50.0
+player = NodePath("../../Player")
+
+[node name="platform2" type="CSGBox3D" parent="TowerManager"]
+use_collision = true
+size = Vector3(5, 1, 5)
+material = ExtResource("5_55inp")
