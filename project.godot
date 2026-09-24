@@ -11,13 +11,20 @@ config_version=5
 [application]
 
 config/name="AscensionOutFromTheDeep"
-run/main_scene="res://scenes/mainScene.tscn"
+run/main_scene="res://scenes/game.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [autoload]
 
 Global="*res://scripts/globals.gd"
+
+[display]
+
+window/size/viewport_width=540
+window/size/viewport_height=960
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [input]
 
