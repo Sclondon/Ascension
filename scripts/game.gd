@@ -290,6 +290,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		pressed = event.pressed
 	elif event is InputEventMouseMotion:
 		pointer_x = event.position.x
+		# The release can happen outside the iframe and never reach us
+		if not (event.button_mask & MOUSE_BUTTON_MASK_LEFT):
+			pointer_down = false
 	elif event is InputEventKey and event.pressed and not event.echo:
 		pressed = true
 
@@ -299,6 +302,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif state == State.DEAD and dead_time > 0.8:
 			_start()
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_MOUSE_EXIT:
+		pointer_down = false
+
 func _steer_input() -> float:
 	var dir := 0.0
 	if Input.is_physical_key_pressed(KEY_LEFT) or Input.is_physical_key_pressed(KEY_A):
@@ -306,8 +313,8 @@ func _steer_input() -> float:
 	if Input.is_physical_key_pressed(KEY_RIGHT) or Input.is_physical_key_pressed(KEY_D):
 		dir += 1.0
 	dir += Input.get_joy_axis(0, JOY_AXIS_LEFT_X) if abs(Input.get_joy_axis(0, JOY_AXIS_LEFT_X)) > 0.25 else 0.0
-	if pointer_down:
-		# Hold anywhere: the further from the middle, the faster the spin
+	if pointer_down and dir == 0.0:
+		# Hold anywhere (keys win over a held pointer): the further from the middle, the faster the spin
 		var w := get_viewport().get_visible_rect().size.x
 		dir += clamp((pointer_x - w * 0.5) / (w * 0.22), -1.0, 1.0)
 	if autoplay:
@@ -329,7 +336,7 @@ func _autoplay_steer() -> float:
 	if autoplay_target.is_empty():
 		return 0.0
 	var diff := wrapf(_platform_angle(autoplay_target) - theta, -PI, PI)
-	return clamp(diff * 4.0, -1.0, 1.0)
+	return clamp(-diff * 4.0, -1.0, 1.0)
 
 func _pick_autoplay_target(bounce: float) -> void:
 	var apex := bounce * bounce / (2.0 * GRAVITY)
@@ -377,7 +384,7 @@ func _physics_process(delta: float) -> void:
 	var steer := _steer_input() if state == State.PLAYING else 0.0
 	var target_speed := steer * MAX_TURN_SPEED
 	turn_speed = move_toward(turn_speed, target_speed, TURN_ACCEL * delta)
-	theta += turn_speed * delta
+	theta -= turn_speed * delta      # D / right spins the tower's face to the right
 	if abs(steer) > 0.1:
 		crow.flip_h = steer > 0      # sprite art faces left
 
