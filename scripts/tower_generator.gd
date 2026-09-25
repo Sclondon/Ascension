@@ -156,3 +156,29 @@ func path_around(y: float) -> Array[Dictionary]:
 			if s.get("path", false):
 				out.append(s)
 	return out
+
+# Is anything solid (tower wall, a ledge, a hanging room) on the line from
+# `from` toward `to`, within `reach` metres? Used to show the bird's
+# see-through silhouette only when it is actually hidden.
+func blocked(from: Vector3, to: Vector3, reach := 9.0) -> bool:
+	var dir := to - from
+	var n := int(min(reach, dir.length()) / 0.6)
+	dir = dir.normalized() * 0.6
+	for i in range(1, n + 1):
+		var p := from + dir * i
+		var theta := atan2(p.x, p.z)
+		var r := Vector2(p.x, p.z).length()
+		if p.y > 0.0 and r < TowerShape.wall_r(TowerShape.chunk_at(p.y), theta):
+			return true
+		for s in _surfaces_between(p.y - 0.1, p.y + 4.3):
+			if s.kind == ChunkPlanner.Kind.GROUND:
+				continue
+			var below: float = ChunkPlanner.hangs_below(s) if ChunkPlanner.is_outer(s) else 0.5
+			if p.y <= s.top and p.y >= s.top - below and TowerChunk.contains(s, theta, r, 0.0):
+				return true
+	return false
+
+func smash(s: Dictionary) -> void:
+	var c := chunk_of(s)
+	if c:
+		c.smash(s)

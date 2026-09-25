@@ -39,6 +39,10 @@ var facing := 1.0
 var squash := 0.0
 var knock := Vector2.ZERO             # shove from a bump (around, in/out) m/s, fades
 var is_npc := false                    # rival climbers: no silhouette, no pickups
+var regen_rate := Tuning.REGEN_RATE
+var speed_mult := 1.0
+var hidden_for := 0.0                  # how long something has blocked the view of the bird
+var _hidden := false
 var frames_idle: SpriteFrames = IDLE_FRAMES
 var frames_flap: SpriteFrames = FLAP_FRAMES
 var frames_fall: SpriteFrames = FALL_FRAMES
@@ -80,7 +84,8 @@ func _ready() -> void:
 	ghost.no_depth_test = true
 	ghost.render_priority = 4
 	add_child(ghost)
-	ghost.visible = not is_npc
+	ghost.visible = false
+	ghost.modulate.a = 0.0
 	# Keep the silhouette on exactly the same frame (it would otherwise lag a
 	# frame behind and show its wings beside the bird while flapping fast)
 	sprite.frame_changed.connect(func(): ghost.frame = sprite.frame)
@@ -124,7 +129,7 @@ func world_position() -> Vector3:
 func _physics_process(delta: float) -> void:
 	if tower == null:
 		return
-	var band := TowerShape.band_at(y + 0.05)
+	var shape := TowerShape.chunk_at(y + 0.05)
 
 	var ax := 0.0
 	var ar := 0.0
@@ -140,16 +145,16 @@ func _physics_process(delta: float) -> void:
 
 	# Around / in-out, with snappier control on the ground
 	var accel := Tuning.GROUND_ACCEL if grounded else Tuning.AIR_ACCEL
-	vt = move_toward(vt, ax * Tuning.RUN_SPEED, accel * delta)
-	vr = move_toward(vr, ar * Tuning.RADIAL_SPEED, accel * delta)
+	vt = move_toward(vt, ax * Tuning.RUN_SPEED * speed_mult, accel * delta)
+	vr = move_toward(vr, ar * Tuning.RADIAL_SPEED * speed_mult, accel * delta)
 	if abs(ax) > 0.1:
 		facing = sign(ax)
 	var push := 0.0 if grounded else weather_wind
 	theta += (vt + push + knock.x) / r * delta
 	r += (vr + knock.y) * delta
 	knock = knock.move_toward(Vector2.ZERO, 12.0 * delta)
-	var r_min := TowerShape.wall_r(band, theta, Tuning.WALL_MARGIN)
-	var r_max := TowerShape.apothem(band) + Tuning.OUTER_REACH
+	var r_min := TowerShape.wall_r(shape, theta, Tuning.WALL_MARGIN)
+	var r_max := TowerShape.wall_r(shape, theta, Tuning.OUTER_REACH)
 	r = clamp(r, r_min, max(r_max, r_min))
 
 	# Jumping: the ground jump costs a little stamina, each air flap more
@@ -190,7 +195,7 @@ func _physics_process(delta: float) -> void:
 			y = ground.top
 			regen_wait -= delta
 			if regen_wait <= 0.0 and sick <= 0.0:
-				stamina = min(stamina + Tuning.REGEN_RATE * delta, max_stamina)
+				stamina = min(stamina + regen_rate * delta, max_stamina)
 			tower.touch(ground)
 	if not grounded:
 		# Holding jump on the way down glides, for as long as stamina lasts:
@@ -238,6 +243,15 @@ func _physics_process(delta: float) -> void:
 				stamina = max(stamina - Tuning.POISON_DRAIN, 0.0)
 				sick = Tuning.POISON_SICK
 		picked_up.emit(kind)
+
+# Struck by lightning: stunned, blasted outward and up, and it stings
+func zap() -> void:
+	stun = 0.9
+	knock.y += 8.0
+	vy = max(vy, 7.0)
+	_leave_ground()
+	stamina = max(stamina - 25.0, 0.0)
+	squash = 1.0
 
 # Bounced off something's head (another bird): a free hop up
 func bounce(speed: float) -> void:
@@ -329,6 +343,17 @@ func _process(delta: float) -> void:
 	ghost.flip_h = sprite.flip_h
 	ghost.scale = sprite.scale
 	ghost.position = nudge
+	# Only show the silhouette when something really is in the way (it used to
+	# sit under the bird all the time, which some phones drew as a second bird)
+	if not is_npc and cam and tower:
+		# (a line-of-sight check; every third frame is plenty)
+		if Engine.get_process_frames() % 3 == 0:
+			_hidden = tower.blocked(global_position + Vector3(0, 0.7, 0), cam.global_position)
+		var hidden := _hidden
+		hidden_for = hidden_for + delta if hidden else 0.0
+		var want := 1.0 if hidden_for > 0.08 else 0.0     # (the frames carry the tint and alpha)
+		ghost.modulate.a = move_toward(ghost.modulate.a, want, delta * 4.0)
+		ghost.visible = ghost.modulate.a > 0.01
 
 	feathers.emitting = flapping
 	feathers.position = nudge + Vector3(0, 0.6, 0)
@@ -407,7 +432,7 @@ func _make_feathers() -> CPUParticles3D:
 	var p := CPUParticles3D.new()
 	p.local_coords = false
 	p.emitting = false
-	p.amount = 8
+	p.amount = Tuning.particles(8)
 	p.lifetime = 1.8
 	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
 	p.emission_sphere_radius = 0.35

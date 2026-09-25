@@ -53,6 +53,15 @@ static func contains(s: Dictionary, theta: float, r: float, tol: float) -> bool:
 	if s.broken:
 		return false
 	var p := TowerShape.polar_point(theta - s.offset, r)
+	# Cheap bounding-box reject before the polygon tests (these run a lot)
+	if not s.has("bb"):
+		var bb := Rect2(s.polys[0][0], Vector2.ZERO)
+		for poly: PackedVector2Array in s.polys:
+			for q in poly:
+				bb = bb.expand(q)
+		s.bb = bb
+	if not (s.bb as Rect2).grow(tol).has_point(p):
+		return false
 	for poly: PackedVector2Array in s.polys:
 		if Geometry2D.is_point_in_polygon(p, poly):
 			return true
@@ -76,7 +85,8 @@ func tick(time: float, delta: float) -> void:
 				s.top = s.base_top + sin(time * 0.8 + s.bob_phase) * ISLAND_BOB
 				if s.node:
 					s.node.position.y = s.top - s.base_top
-			Kind.CRUMBLE, Kind.FRAGILE:
+			_:
+				# Crumbling ledges, and anything lightning has smashed
 				if s.crumble >= 0.0:
 					_tick_crumble(s, delta)
 	for pk in pickups:
@@ -122,6 +132,14 @@ func touch(s: Dictionary) -> void:
 		s.crumble = 0.0
 		s.delay = CRUMBLE_DELAY
 		s.spin = 1.0 if randf() < 0.5 else -1.0
+
+# Hit by lightning: shatters straight away (and grows back like the others)
+func smash(s: Dictionary) -> void:
+	if s.kind in [Kind.GROUND, Kind.RING, Kind.MOVER, Kind.ISLAND] or s.crumble >= 0.0:
+		return
+	s.crumble = 0.0
+	s.delay = 0.02
+	s.spin = 1.0 if randf() < 0.5 else -1.0
 
 # Stepping or jumping off: cracked ledges give way behind you
 func leave(s: Dictionary) -> void:
@@ -183,14 +201,14 @@ func build() -> void:
 	if built:
 		return
 	built = true
-	var band: int = plan.band
+	var shape: int = plan.k
 	var base: float = plan.base
-	var tint := TowerShape.tint(band)
-	_build_walls(band, base, tint)
+	var tint := TowerShape.tint(shape)
+	_build_walls(shape, base, tint)
 	for s in surfaces:
 		_build_surface(s, tint)
 	for w in plan.windows:
-		_build_window(band, w)
+		_build_window(shape, w)
 	for pk in pickups:
 		_build_pickup(pk)
 	for d in drafts:
@@ -198,29 +216,50 @@ func build() -> void:
 	for n in plan.npcs:
 		_build_npc(n)
 
-func _build_walls(band: int, base: float, tint: Color) -> void:
+func _build_walls(shape: int, base: float, tint: Color) -> void:
 	var st := MeshUtil.begin()
-	var n := TowerShape.sides(band)
-	var half := TowerShape.face_step(band) * 0.5
+	var n := TowerShape.sides(shape)
+	var half := TowerShape.face_step(shape) * 0.5
 	var y0 := base - (2.0 if plan.ground else 0.0)
 	var y1 := base + TowerShape.CHUNK_H
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([plan.k, 3])
 	for i in n:
-		var c := TowerShape.face_center(band, i)
-		var p0 := TowerShape.ring_point(band, c - half, 0.0)
-		var p1 := TowerShape.ring_point(band, c + half, 0.0)
+		var c := TowerShape.face_center(shape, i)
+		var p0 := TowerShape.ring_point(shape, c - half, 0.0)
+		var p1 := TowerShape.ring_point(shape, c + half, 0.0)
 		var shade := Color.WHITE.darkened(rng.randf_range(0.0, 0.12))
 		MeshUtil.face(st, [Vector3(p0.x, y0, p0.y), Vector3(p1.x, y0, p1.y), Vector3(p1.x, y1, p1.y), Vector3(p0.x, y1, p0.y)],
 			Vector3(sin(c), 0, cos(c)), shade)
 	# A thin string course at the chunk's base marks height as you climb
 	if not ChunkPlanner.is_band_start(plan.k) and not plan.ground:
 		for half_ring in [[0.0, PI], [PI, TAU]]:
-			MeshUtil.extrude(st, TowerShape.strip_polygon(band, half_ring[0], half_ring[1], -0.02, 0.18), base - 0.12, base + 0.12, Color(0.75, 0.72, 0.7))
+			MeshUtil.extrude(st, TowerShape.strip_polygon(shape, half_ring[0], half_ring[1], -0.02, 0.18), base - 0.12, base + 0.12, Color(0.75, 0.72, 0.7))
+	# Where the thickness changes, a sloped cap (narrowing) or a corbelled
+	# overhang (widening) joins this chunk to the one below
+	if plan.k > 0 and not ChunkPlanner.is_band_start(plan.k):
+		var step: float = TowerShape.apothem(plan.k - 1) - TowerShape.apothem(plan.k)
+		if abs(step) > 0.04:
+			for i in n:
+				var c := TowerShape.face_center(shape, i)
+				var out := Vector3(sin(c), 0, cos(c))
+				var lo_d := step                # where the wall below meets this chunk
+				var p0 := TowerShape.ring_point(shape, c - half, lo_d)
+				var p1 := TowerShape.ring_point(shape, c + half, lo_d)
+				var q0 := TowerShape.ring_point(shape, c - half, 0.0)
+				var q1 := TowerShape.ring_point(shape, c + half, 0.0)
+				if step > 0.0:
+					# Narrowing: slope up from the wider wall below onto this one
+					MeshUtil.face(st, [Vector3(p0.x, base, p0.y), Vector3(p1.x, base, p1.y), Vector3(q1.x, base + 0.7, q1.y), Vector3(q0.x, base + 0.7, q0.y)],
+						out + Vector3.UP, Color(0.8, 0.77, 0.74))
+				else:
+					# Widening: slope out from the narrower wall below under this one
+					MeshUtil.face(st, [Vector3(p0.x, base - 0.8, p0.y), Vector3(p1.x, base - 0.8, p1.y), Vector3(q1.x, base, q1.y), Vector3(q0.x, base, q0.y)],
+						out + Vector3.DOWN, Color(0.62, 0.6, 0.58))
 	# Where the side count changes, cap the old band's top so there's no gap
 	if ChunkPlanner.is_band_start(plan.k):
-		var prev := band - 1
-		var rad: float = max(TowerShape.apothem(prev) / cos(PI / TowerShape.sides(prev)), TowerShape.apothem(band))
+		var prev: int = plan.k - 1
+		var rad: float = max(TowerShape.apothem(prev) / cos(PI / TowerShape.sides(prev)), TowerShape.apothem(shape))
 		var cap := PackedVector2Array()
 		for i in 24:
 			cap.append(TowerShape.polar_point(TAU * i / 24.0, rad + 0.05))
@@ -242,25 +281,25 @@ func _build_surface(s: Dictionary, tint: Color) -> void:
 	var st := MeshUtil.begin()
 	var top: float = s.top
 	var mat := MeshUtil.stone_material(tint.lerp(Color(1.0, 0.93, 0.8), 0.5), "slab")
-	var band: int = s.band
+	var shape: int = s.k
 	match s.kind:
 		Kind.LEDGE:
 			for poly in s.polys:
 				MeshUtil.extrude(st, poly, top - 0.45, top, Color(0.95, 0.92, 0.88))
 			# Corbel underneath
 			var inset: float = (s.a1 - s.a0) * 0.15
-			MeshUtil.extrude(st, TowerShape.strip_polygon(band, s.a0 + inset, s.a1 - inset, 0.0, s.d1 * 0.45), top - 1.0, top - 0.45, Color(0.7, 0.68, 0.66))
+			MeshUtil.extrude(st, TowerShape.strip_polygon(shape, s.a0 + inset, s.a1 - inset, 0.0, s.d1 * 0.45), top - 1.0, top - 0.45, Color(0.7, 0.68, 0.66))
 		Kind.BALCONY:
 			for poly in s.polys:
 				MeshUtil.extrude(st, poly, top - 0.4, top, Color(1.0, 0.97, 0.9))
 			_build_railing(st, s)
 			var inset: float = (s.a1 - s.a0) * 0.1
 			for a in [s.a0 + inset, s.a1 - inset * 2.0]:
-				MeshUtil.extrude(st, TowerShape.strip_polygon(band, a, a + inset, 0.0, s.d1 * 0.7), top - 1.2, top - 0.4, Color(0.7, 0.68, 0.66))
+				MeshUtil.extrude(st, TowerShape.strip_polygon(shape, a, a + inset, 0.0, s.d1 * 0.7), top - 1.2, top - 0.4, Color(0.7, 0.68, 0.66))
 		Kind.PERCH:
 			for poly in s.polys:
 				MeshUtil.extrude(st, poly, top - 0.3, top, Color(0.55, 0.42, 0.32))
-			var tip := TowerShape.ring_point(band, (s.a0 + s.a1) * 0.5, s.d1)
+			var tip := TowerShape.ring_point(shape, (s.a0 + s.a1) * 0.5, s.d1)
 			MeshUtil.box(st, Vector3(tip.x, top - 0.15, tip.y), Vector3(0.5, 0.5, 0.5), (s.a0 + s.a1) * 0.5, Color(0.5, 0.48, 0.5))
 		Kind.RING:
 			for poly in s.polys:
@@ -274,12 +313,12 @@ func _build_surface(s: Dictionary, tint: Color) -> void:
 			rng.seed = hash(s.id)
 			for i in 5:
 				var a: float = lerp(s.a0, s.a1, rng.randf_range(0.1, 0.9))
-				var p := TowerShape.ring_point(band, a, rng.randf_range(0.3, s.d1 - 0.3))
+				var p := TowerShape.ring_point(shape, a, rng.randf_range(0.3, s.d1 - 0.3))
 				MeshUtil.box(st, Vector3(p.x, top + 0.06, p.y), Vector3(0.28, 0.14, 0.24) * rng.randf_range(0.7, 1.3), rng.randf() * TAU, Color(0.8, 0.62, 0.5))
 			# Dangling roots / crumbs underneath
 			for i in 3:
 				var a: float = lerp(s.a0, s.a1, rng.randf_range(0.15, 0.85))
-				var p := TowerShape.ring_point(band, a, rng.randf_range(0.3, s.d1 - 0.3))
+				var p := TowerShape.ring_point(shape, a, rng.randf_range(0.3, s.d1 - 0.3))
 				MeshUtil.box(st, Vector3(p.x, top - 0.5, p.y), Vector3(0.18, 0.35, 0.18), rng.randf() * TAU, Color(0.6, 0.45, 0.35))
 		Kind.FRAGILE:
 			# Cracked old stone: holds while you stand, gives way once you leave
@@ -289,9 +328,9 @@ func _build_surface(s: Dictionary, tint: Color) -> void:
 			rng.seed = hash(s.id)
 			for i in 3:
 				var a: float = lerp(s.a0, s.a1, rng.randf_range(0.2, 0.8))
-				var p := TowerShape.ring_point(band, a, s.d1 * 0.5)
+				var p := TowerShape.ring_point(shape, a, s.d1 * 0.5)
 				MeshUtil.box(st, Vector3(p.x, top + 0.01, p.y), Vector3(0.07, 0.03, s.d1 * rng.randf_range(0.5, 0.9)), a + rng.randf_range(-0.5, 0.5), Color(0.2, 0.2, 0.18))
-			var tip := TowerShape.ring_point(band, lerp(s.a0, s.a1, 0.7), s.d1 - 0.3)
+			var tip := TowerShape.ring_point(shape, lerp(s.a0, s.a1, 0.7), s.d1 - 0.3)
 			MeshUtil.box(st, Vector3(tip.x, top - 0.55, tip.y), Vector3(0.3, 0.4, 0.3), 0.4, Color(0.7, 0.74, 0.62))
 		Kind.MOVER:
 			mat = MeshUtil.stone_material(Color(0.75, 0.62, 1.0), "glow")
@@ -301,7 +340,7 @@ func _build_surface(s: Dictionary, tint: Color) -> void:
 
 # A little room hung off the tower on beams, crenellated on top (a bartizan)
 func _build_turret(holder: Node3D, s: Dictionary, tint: Color) -> void:
-	var band: int = s.band
+	var shape: int = s.k
 	var top: float = s.top
 	var R: float = s.radius
 	var c := Vector2(s.cx, s.cz)
@@ -332,7 +371,7 @@ func _build_turret(holder: Node3D, s: Dictionary, tint: Color) -> void:
 	MeshUtil.cone(wood, Vector3(c.x, top - 2.9, c.y), R * 0.95, -1.4, 8, ROOF)
 	# Beam straight out from the wall, and a diagonal strut below it
 	var a: float = atan2(c.x, c.y)
-	var w := TowerShape.ring_point(band, a, -0.1)
+	var w := TowerShape.ring_point(shape, a, -0.1)
 	var room_in := c - out * R * 0.8
 	MeshUtil.beam(wood, Vector3(w.x, top - 0.75, w.y), Vector3(room_in.x, top - 0.75, room_in.y), 0.32, WOOD)
 	MeshUtil.beam(wood, Vector3(w.x, top - 3.4, w.y), Vector3(room_in.x, top - 1.6, room_in.y), 0.26, WOOD.darkened(0.15))
@@ -410,7 +449,7 @@ func _build_draft(d: Dictionary) -> void:
 	var h: float = d.y1 - d.y0
 	var speed := 7.0 if d.up else 6.0
 	var p := CPUParticles3D.new()
-	p.amount = int(h * 4.0)
+	p.amount = Tuning.particles(int(h * 4.0))
 	p.lifetime = h / speed
 	p.preprocess = p.lifetime
 	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_RING
@@ -443,24 +482,24 @@ func _build_draft(d: Dictionary) -> void:
 	add_child(p)
 
 func _build_railing(st: SurfaceTool, s: Dictionary) -> void:
-	var band: int = s.band
+	var shape: int = s.k
 	var top: float = s.top
 	var d: float = s.d1 - 0.12
-	MeshUtil.extrude(st, TowerShape.strip_polygon(band, s.a0, s.a1, d - 0.08, d + 0.08), top + 0.55, top + 0.68, Color(0.9, 0.88, 0.85), 1.0)
+	MeshUtil.extrude(st, TowerShape.strip_polygon(shape, s.a0, s.a1, d - 0.08, d + 0.08), top + 0.55, top + 0.68, Color(0.9, 0.88, 0.85), 1.0)
 	var angles: Array[float] = [s.a0]
-	angles.append_array(TowerShape.corners_between(band, s.a0, s.a1))
+	angles.append_array(TowerShape.corners_between(shape, s.a0, s.a1))
 	angles.append(s.a1)
 	for i in angles.size() - 1:
-		var seg := TowerShape.perimeter_len(band, angles[i], angles[i + 1], d)
+		var seg := TowerShape.perimeter_len(shape, angles[i], angles[i + 1], d)
 		var count: int = max(1, roundi(seg / 0.7))
 		for j in count + (1 if i == angles.size() - 2 else 0):
 			var a: float = lerp(angles[i], angles[i + 1], float(j) / count)
-			var p := TowerShape.ring_point(band, a, d)
+			var p := TowerShape.ring_point(shape, a, d)
 			MeshUtil.box(st, Vector3(p.x, top + 0.3, p.y), Vector3(0.12, 0.6, 0.12), a, Color(0.85, 0.83, 0.8))
 
-func _build_window(band: int, w: Dictionary) -> void:
-	var c := TowerShape.face_center(band, w.face)
-	var r := TowerShape.apothem(band) + 0.03
+func _build_window(shape: int, w: Dictionary) -> void:
+	var c := TowerShape.face_center(shape, w.face)
+	var r := TowerShape.apothem(shape) + 0.03
 	var mat := ShaderMaterial.new()
 	mat.shader = GLASS_SHADER
 	mat.set_shader_parameter("style", w.style)

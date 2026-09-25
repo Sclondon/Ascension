@@ -16,6 +16,7 @@ var used := false
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	used = DisplayServer.is_touchscreen_available()
 
@@ -74,20 +75,92 @@ func _axis(neg: String, pos: String, value: float) -> void:
 		Input.action_release(neg)
 		Input.action_release(pos)
 
+# --- look ------------------------------------------------------------------
+# Pixel-art controls in the game's colours: a gold-rimmed stone dial with a
+# gem for a knob, and a round jump button with a wing on it. Drawn from small
+# generated textures scaled up with nearest filtering, like the HUD border.
+
+const PX := 4                        # screen pixels per art pixel
+const GOLD := Color(0.95, 0.75, 0.28)
+const GOLD_DARK := Color(0.55, 0.35, 0.1)
+const INK := Color(0.1, 0.04, 0.14)
+const STONE := Color(0.16, 0.08, 0.22, 0.6)
+const CREAM := Color(1.0, 0.95, 0.85)
+
+static var _tex := {}
+
 func _draw() -> void:
 	if not used:
 		return
-	var size := get_viewport_rect().size
-	var ink := Color(1, 1, 1, 0.25)
-	var ink_strong := Color(1, 1, 1, 0.5)
-	if stick_index != -1:
-		draw_circle(stick_origin, STICK_RADIUS, ink, false, 4.0)
-		draw_circle(stick_pos, 30.0, ink_strong)
-	else:
-		var hint := Vector2(size.x * 0.22, size.y - 150)
-		draw_circle(hint, STICK_RADIUS, ink, false, 4.0)
-		draw_circle(hint, 30.0, ink)
-	var jump_at := Vector2(size.x * 0.78, size.y - 150)
-	draw_circle(jump_at, 64.0, ink_strong if jump_index != -1 else ink)
-	var font := get_theme_default_font()
-	draw_string(font, jump_at + Vector2(-40, 10), "JUMP", HORIZONTAL_ALIGNMENT_CENTER, 80, 26, Color(1, 1, 1, 0.8))
+	var screen := get_viewport_rect().size
+	var base_at := stick_origin if stick_index != -1 else Vector2(screen.x * 0.22, screen.y - 150)
+	var knob_at := stick_pos if stick_index != -1 else base_at
+	var idle := 0.55 if stick_index == -1 else 1.0
+	_blit("dial", base_at, idle)
+	_blit("gem", knob_at, idle)
+	var jump_at := Vector2(screen.x * 0.78, screen.y - 150)
+	var pressed := jump_index != -1
+	_blit("jump_down" if pressed else "jump", jump_at + (Vector2(0, PX) if pressed else Vector2.ZERO), 1.0 if pressed else 0.8)
+
+func _blit(name: String, centre: Vector2, alpha: float) -> void:
+	var tex := _texture(name)
+	var s := tex.get_size() * PX
+	draw_texture_rect(tex, Rect2(centre - s * 0.5, s), false, Color(1, 1, 1, alpha))
+
+static func _texture(name: String) -> Texture2D:
+	if _tex.has(name):
+		return _tex[name]
+	var img: Image
+	match name:
+		"dial":
+			img = _disc(36, STONE, true)
+			# Four gold arrowheads: around the tower and in / out
+			for d in [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]:
+				for i in 3:
+					for j in range(-i, i + 1):
+						var along: Vector2i = d * (14 - 2 - i)
+						var across := Vector2i(d.y, d.x) * j
+						img.set_pixelv(Vector2i(18, 18) + along + across, GOLD)
+		"gem":
+			img = _disc(16, GOLD, false)
+			for p in [Vector2i(5, 5), Vector2i(6, 5), Vector2i(5, 6)]:
+				img.set_pixelv(p, CREAM)
+		"jump", "jump_down":
+			img = _disc(34, Color(0.28, 0.12, 0.34, 0.75) if name == "jump" else Color(0.45, 0.2, 0.5, 0.85), true)
+			# A wing
+			var wing := [
+				"......cc....",
+				"....cccc....",
+				"..ccccccc...",
+				".ccccccccc..",
+				"cccccccccccc",
+				"cc.cc.cc.ccc",
+				"c..c..c..c.c",
+			]
+			for y in wing.size():
+				for x in wing[y].length():
+					if wing[y][x] == "c":
+						img.set_pixel(11 + x, 13 + y, CREAM)
+	var tex := ImageTexture.create_from_image(img)
+	_tex[name] = tex
+	return tex
+
+# A filled disc with a dark outline (and a gold rim when `rim`)
+static func _disc(size: int, fill: Color, rim: bool) -> Image:
+	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var c := (size - 1) * 0.5
+	for y in size:
+		for x in size:
+			var d := Vector2(x - c, y - c).length()
+			var r := size * 0.5
+			if d > r:
+				continue
+			var col := fill
+			if d > r - 1.0:
+				col = INK
+			elif rim and d > r - 3.0:
+				col = GOLD if y < c else GOLD_DARK      # lit from above
+			elif rim and d > r - 4.0:
+				col = INK
+			img.set_pixel(x, y, col)
+	return img

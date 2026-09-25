@@ -36,6 +36,8 @@ func update(delta: float, tips: Array[Vector3]) -> void:
 	_rebuild()
 
 func _rebuild() -> void:
+	if _trails[0].is_empty() and _trails[1].is_empty() and _mesh.get_surface_count() == 0:
+		return   # nothing to draw, and nothing drawn
 	_mesh.clear_surfaces()
 	var cam := get_viewport().get_camera_3d()
 	if cam == null:

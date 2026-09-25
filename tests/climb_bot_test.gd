@@ -14,6 +14,7 @@ func _init() -> void:
 	tower.reset(42)
 	var bot := ClimberBird.new()
 	bot.tower = tower
+	bot.make(false)
 	root.add_child(bot)
 	bot.set_physics_process(false)
 	bot.set_process(false)
@@ -27,7 +28,7 @@ func _init() -> void:
 		bot._physics_process(DT)
 		tower.tick(DT)
 		t += DT
-		min_margin = min(min_margin, bot.r - TowerShape.wall_r(TowerShape.band_at(bot.y + 0.05), bot.theta))
+		min_margin = min(min_margin, bot.r - TowerShape.wall_r(TowerShape.chunk_at(bot.y + 0.05), bot.theta))
 		assert(bot.stamina >= -0.001 and bot.stamina <= bot.max_stamina + 0.001)
 		if int(t / DT) % 3600 == 0:
 			print("t=%3ds  y=%6.1f  max=%6.1f  grounded=%s  stamina=%.0f" % [t, bot.y, bot.max_y, bot.grounded, bot.stamina])

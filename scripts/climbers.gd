@@ -4,7 +4,7 @@ extends Node3D
 # birds shove each other sideways (which can knock you off a ledge), and
 # landing on another bird's head bounces you up for free.
 
-const MAX_BIRDS := 2
+const MAX_BIRDS := 3
 const KEEP_RANGE := 45.0             # rivals further than this (vertically) are dropped
 const BUMP_RADIUS := 0.9
 const BUMP_HEIGHT := 1.3
@@ -28,7 +28,7 @@ func _physics_process(delta: float) -> void:
 		return
 	spawn_timer -= delta
 	if spawn_timer <= 0.0:
-		spawn_timer = randf_range(10.0, 22.0)
+		spawn_timer = randf_range(8.0, 16.0)
 		if birds.size() < MAX_BIRDS and player.y > 6.0:
 			_spawn()
 	for i in range(birds.size() - 1, -1, -1):
@@ -50,10 +50,10 @@ func _spawn() -> void:
 	var s: Dictionary = options[randi_range(0, options.size() - 1)]
 	var b := ClimberBird.new()
 	b.tower = tower
-	b.dress(ClimberBird.TINTS[randi_range(0, ClimberBird.TINTS.size() - 1)])
+	b.make(randf() < 0.35)              # about a third are flyers
 	add_child(b)
 	var a: float = (s.a0 + s.a1) * 0.5
-	var r: float = Vector2(s.cx, s.cz).length() if ChunkPlanner.is_outer(s) else TowerShape.wall_r(s.band, a, min(1.0, s.d1 * 0.5))
+	var r: float = Vector2(s.cx, s.cz).length() if ChunkPlanner.is_outer(s) else TowerShape.wall_r(s.k, a, min(1.0, s.d1 * 0.5))
 	b.place(a, r, s.top)
 	birds.append(b)
 

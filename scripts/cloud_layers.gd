@@ -10,6 +10,7 @@ const KEEP_BANDS := 2
 
 var noise_tex: NoiseTexture2D
 var decks := {}                      # band index -> Node3D
+var last_tint := Color.WHITE
 
 static func deck_height(b: int) -> float:
 	return b * TowerShape.BAND_H - 5.0
@@ -34,11 +35,14 @@ func update(focus_y: float, tint: Color, cam_pos: Vector3) -> void:
 		# Noise is sampled in world space, so sliding the plane along is invisible
 		decks[b].position.x = cam_pos.x
 		decks[b].position.z = cam_pos.z
-		for mi in decks[b].get_children():
-			mi.mesh.material.set_shader_parameter("tint", tint)
+		if tint != last_tint or decks[b].get_meta("fresh", true):
+			decks[b].set_meta("fresh", false)
+			for mi in decks[b].get_children():
+				mi.mesh.material.set_shader_parameter("tint", tint)
 		if abs(b - c) > KEEP_BANDS + 1:
 			decks[b].queue_free()
 			decks.erase(b)
+	last_tint = tint
 
 func clear() -> void:
 	for d in decks.values():
@@ -51,7 +55,7 @@ func _make_deck(b: int) -> Node3D:
 	deck.position.y = deck_height(b)
 	add_child(deck)
 	# Three thin layers give the deck some thickness to fly through
-	for i in 3:
+	for i in (2 if Tuning.low_quality else 3):
 		var m := ShaderMaterial.new()
 		m.shader = CLOUD_SHADER
 		m.set_shader_parameter("noise_tex", noise_tex)

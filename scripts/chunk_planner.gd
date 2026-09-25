@@ -13,6 +13,8 @@ const ANCHOR_LIFT := 0.3
 const MIN_DY := 1.6
 const REACH_MARGIN := 0.75           # path gaps use at most 75% of the real reach
 const TURRET_RADIUS := 1.4
+const CLEARANCE := 2.6               # min height between overlapping surfaces
+const FAR_OUT := Vector2(5.5, 7.6)   # how far out (from the wall) far treasures float
 
 # The first chunks are the same every run: a spiral of ledges round the tower
 const START_CHUNKS := 2
@@ -34,9 +36,15 @@ static func max_dy(band: int) -> float:
 static func gap_cap(band: int) -> float:
 	return lerp(2.0, 5.0, TowerShape.difficulty(band))
 
-static func snap_to_corner(band: int, a: float) -> float:
-	var step := TowerShape.face_step(band)
-	var first := TowerShape.face_offset(band) + step * 0.5
+static func snap_to_corner(k: int, a: float) -> float:
+	var step := TowerShape.face_step(k)
+	var first := TowerShape.face_offset(k) + step * 0.5
+	return first + roundf((a - first) / step) * step
+
+# Centre of the nearest face (balconies sit square on a face, with a door)
+static func snap_to_face(k: int, a: float) -> float:
+	var step := TowerShape.face_step(k)
+	var first := TowerShape.face_offset(k)
 	return first + roundf((a - first) / step) * step
 
 static func spiral_angle(y: float) -> float:
@@ -75,20 +83,20 @@ static func anchor_angle(run_seed: int, k: int) -> float:
 	for j in range(start + 1, k + 1):
 		a += _rng(run_seed, j, 7).randf_range(-1.1, 1.1)
 		if j % 2 == 1:
-			a = snap_to_corner(band, a)
+			a = snap_to_face(k, a)
 	return a
 
 static func anchor(run_seed: int, k: int) -> Dictionary:
 	var band := TowerShape.band_of_chunk(k)
 	var base := k * TowerShape.CHUNK_H
 	if k == 0:
-		return {"kind": Kind.GROUND, "top": 0.0, "band": 0, "a0": 0.0, "a1": TAU, "d0": 0.0, "d1": 99.0, "polys": []}
+		return {"kind": Kind.GROUND, "top": 0.0, "band": 0, "k": 0, "a0": 0.0, "a1": TAU, "d0": 0.0, "d1": 99.0, "polys": []}
 	if is_band_start(k):
-		return ring_surface(band, base)
+		return ring_surface(k, base)
 	var a := anchor_angle(run_seed, k)
 	if k % 2 == 1:
-		return balcony_surface(band, base + ANCHOR_LIFT, a)
-	return wall_surface(band, Kind.LEDGE, base + ANCHOR_LIFT, a, ledge_width(band, 0.5), ledge_depth(band))
+		return balcony_surface(k, base + ANCHOR_LIFT, a)
+	return wall_surface(k, Kind.LEDGE, base + ANCHOR_LIFT, a, ledge_width(band, 0.5), ledge_depth(band))
 
 # --- surface builders ---------------------------------------------------------
 
@@ -99,37 +107,39 @@ static func ledge_width(band: int, roll: float) -> float:
 static func ledge_depth(band: int) -> float:
 	return lerp(2.2, 1.6, TowerShape.difficulty(band))
 
-static func wall_surface(band: int, kind: int, top: float, center: float, width: float, depth: float, d0 := 0.0) -> Dictionary:
-	var half := TowerShape.angle_for_len(band, width * 0.5, (d0 + depth) * 0.5)
-	return _strip(band, kind, top, center - half, center + half, d0, depth)
+static func wall_surface(k: int, kind: int, top: float, center: float, width: float, depth: float, d0 := 0.0) -> Dictionary:
+	var half := TowerShape.angle_for_len(k, width * 0.5, (d0 + depth) * 0.5)
+	return _strip(k, kind, top, center - half, center + half, d0, depth)
 
-static func _strip(band: int, kind: int, top: float, a0: float, a1: float, d0: float, d1: float) -> Dictionary:
+static func _strip(k: int, kind: int, top: float, a0: float, a1: float, d0: float, d1: float) -> Dictionary:
 	return {
-		"kind": kind, "top": top, "band": band, "a0": a0, "a1": a1, "d0": d0, "d1": d1,
-		"polys": [TowerShape.strip_polygon(band, a0, a1, d0, d1)],
+		"kind": kind, "top": top, "band": TowerShape.band_of_chunk(k), "k": k, "a0": a0, "a1": a1, "d0": d0, "d1": d1,
+		"polys": [TowerShape.strip_polygon(k, a0, a1, d0, d1)],
 	}
 
-static func balcony_surface(band: int, top: float, corner: float) -> Dictionary:
-	var width: float = max(TowerShape.face_width(band) * 1.2, 3.4)
-	return wall_surface(band, Kind.BALCONY, top, snap_to_corner(band, corner), width, 2.5)
+# A balcony sits square on a face (with a doorway behind it, see the
+# windows), a little narrower than the face
+static func balcony_surface(k: int, top: float, near: float) -> Dictionary:
+	var width: float = clamp(TowerShape.face_width(k) * 0.92, 2.6, 3.8)
+	return wall_surface(k, Kind.BALCONY, top, snap_to_face(k, near), width, 2.5)
 
-static func ring_surface(band: int, top: float) -> Dictionary:
+static func ring_surface(k: int, top: float) -> Dictionary:
 	var s := {
-		"kind": Kind.RING, "top": top, "band": band, "a0": 0.0, "a1": TAU, "d0": -0.1, "d1": 2.0,
+		"kind": Kind.RING, "top": top, "band": TowerShape.band_of_chunk(k), "k": k, "a0": 0.0, "a1": TAU, "d0": -0.1, "d1": 2.0,
 		"polys": [
-			TowerShape.strip_polygon(band, 0.0, PI, -0.1, 2.0),
-			TowerShape.strip_polygon(band, PI, TAU, -0.1, 2.0),
+			TowerShape.strip_polygon(k, 0.0, PI, -0.1, 2.0),
+			TowerShape.strip_polygon(k, PI, TAU, -0.1, 2.0),
 		],
 	}
 	return s
 
-static func mover_surface(band: int, top: float, center: float, rng: RandomNumberGenerator) -> Dictionary:
+static func mover_surface(k: int, top: float, center: float, rng: RandomNumberGenerator) -> Dictionary:
 	# Floats on a true circle just clear of the tower's corners
-	var r0 := TowerShape.apothem(band) / cos(PI / TowerShape.sides(band)) + 0.35
+	var r0 := TowerShape.apothem(k) / cos(PI / TowerShape.sides(k)) + 0.35
 	var half := 0.9 / (r0 + 0.8)
 	var s := {
-		"kind": Kind.MOVER, "top": top, "band": band, "a0": center - half, "a1": center + half,
-		"d0": r0 - TowerShape.apothem(band), "d1": r0 + 1.6 - TowerShape.apothem(band),
+		"kind": Kind.MOVER, "top": top, "band": TowerShape.band_of_chunk(k), "k": k, "a0": center - half, "a1": center + half,
+		"d0": r0 - TowerShape.apothem(k), "d1": r0 + 1.6 - TowerShape.apothem(k),
 		"polys": [TowerShape.arc_polygon(center - half, center + half, r0, r0 + 1.6)],
 		"swing": rng.randf_range(0.5, 0.9), "speed": rng.randf_range(0.7, 1.3), "phase": rng.randf() * TAU,
 	}
@@ -137,8 +147,8 @@ static func mover_surface(band: int, top: float, center: float, rng: RandomNumbe
 
 # A platform well out from the wall: a turret room hung off a beam, or a
 # floating island. `dist` is how far its centre sits out from the wall.
-static func outer_surface(band: int, kind: int, top: float, center: float, dist: float, rng: RandomNumberGenerator) -> Dictionary:
-	var c := TowerShape.ring_point(band, center, dist)
+static func outer_surface(k: int, kind: int, top: float, center: float, dist: float, rng: RandomNumberGenerator) -> Dictionary:
+	var c := TowerShape.ring_point(k, center, dist)
 	var radius := TURRET_RADIUS if kind == Kind.TURRET else rng.randf_range(1.3, 1.7)
 	var sides := 8 if kind == Kind.TURRET else 7
 	var spin := PI / 8.0 if kind == Kind.TURRET else rng.randf() * TAU
@@ -149,7 +159,7 @@ static func outer_surface(band: int, kind: int, top: float, center: float, dist:
 		poly.append(c + Vector2(cos(a), sin(a)) * rr)
 	var half := radius / c.length()
 	var s := {
-		"kind": kind, "top": top, "band": band, "a0": center - half, "a1": center + half,
+		"kind": kind, "top": top, "band": TowerShape.band_of_chunk(k), "k": k, "a0": center - half, "a1": center + half,
 		"d0": dist - radius, "d1": dist + radius, "polys": [poly],
 		"cx": c.x, "cz": c.y, "radius": radius,
 	}
@@ -176,7 +186,7 @@ static func conflicts(a: Dictionary, b: Dictionary) -> bool:
 	var b_in: float = 0.0 if b.kind == Kind.TURRET else b.d0
 	if a_in > b.d1 + 0.3 or b_in > a.d1 + 0.3:
 		return false
-	return a.top - hangs_below(a) < b.top + 1.8 and b.top - hangs_below(b) < a.top + 1.8
+	return a.top - hangs_below(a) < b.top + CLEARANCE and b.top - hangs_below(b) < a.top + CLEARANCE
 
 # Closest-point distance between two polygons, split into around / in-out
 static func _polygon_hop(pa: PackedVector2Array, pb: PackedVector2Array) -> float:
@@ -214,10 +224,10 @@ static func gap_between(a: Dictionary, b: Dictionary) -> float:
 		return _polygon_hop(a.polys[0], b.polys[0])
 	if angular_overlap(a, b):
 		return 0.0
-	var band: int = a.band
+	var shape: int = a.k
 	var fwd := fposmod(b.a0 - a.a1, TAU)
 	var back := fposmod(a.a0 - b.a1, TAU)
-	return min(TowerShape.perimeter_len(band, a.a1, a.a1 + fwd), TowerShape.perimeter_len(band, b.a1, b.a1 + back))
+	return min(TowerShape.perimeter_len(shape, a.a1, a.a1 + fwd), TowerShape.perimeter_len(shape, b.a1, b.a1 + back))
 
 static func reach_for(dy: float, band: int) -> float:
 	var dist := Tuning.air_distance(dy, Tuning.PATH_FLAPS)
@@ -255,7 +265,7 @@ static func plan(run_seed: int, k: int) -> Dictionary:
 		# The fixed opening: a gentle spiral of ledges climbing round the tower
 		var sy: float = start.top + SPIRAL_STEP
 		while sy < target.top - SPIRAL_STEP * 0.5:
-			var s := wall_surface(band, Kind.LEDGE, sy, spiral_angle(sy), 2.8, 2.2)
+			var s := wall_surface(k, Kind.LEDGE, sy, spiral_angle(sy), 2.8, 2.2)
 			s.path = true
 			surfaces.append(s)
 			cur = s
@@ -300,7 +310,7 @@ static func plan(run_seed: int, k: int) -> Dictionary:
 				gap = reach
 
 		var dist := rng.randf_range(3.6, 5.6)
-		var next := _place_beside(cur, kind, band, cur.top + dy, dir, gap, width, depth, dist, rng)
+		var next := _place_beside(cur, kind, k, cur.top + dy, dir, gap, width, depth, dist, rng)
 		# Placement is approximate: pull it in (around and in/out) if too far
 		for i in 5:
 			var over := gap_between(cur, next) - reach
@@ -308,7 +318,7 @@ static func plan(run_seed: int, k: int) -> Dictionary:
 				break
 			gap -= over + 0.1
 			dist = max(3.4, dist - over)
-			next = _place_beside(cur, kind, band, cur.top + dy, dir, gap, width, depth, dist, rng)
+			next = _place_beside(cur, kind, k, cur.top + dy, dir, gap, width, depth, dist, rng)
 		# Turrets and islands hang a long way down: if one would run into
 		# something (or still can't be reached), make it a plain ledge instead
 		if is_outer(next):
@@ -320,13 +330,22 @@ static func plan(run_seed: int, k: int) -> Dictionary:
 				kind = Kind.LEDGE
 				width = ledge_width(band, 0.5)
 				gap = min(gap, reach * 0.5)
-				next = _place_beside(cur, kind, band, cur.top + dy, dir, gap, width, depth, dist, rng)
+				next = _place_beside(cur, kind, k, cur.top + dy, dir, gap, width, depth, dist, rng)
 				for i in 4:
 					var over := gap_between(cur, next) - reach
 					if over <= 0.0:
 						break
 					gap -= over + 0.1
-					next = _place_beside(cur, kind, band, cur.top + dy, dir, gap, width, depth, dist, rng)
+					next = _place_beside(cur, kind, k, cur.top + dy, dir, gap, width, depth, dist, rng)
+		# Don't stack a step right on top of something: sidestep instead, as
+		# long as that's still in reach
+		if _crowded(next, surfaces):
+			for i in 3:
+				var side_gap: float = max(gap, 0.0) + 1.0 + 0.6 * i
+				var cand := _place_beside(cur, kind, k, cur.top + dy, dir, side_gap, width, depth, dist, rng)
+				if gap_between(cur, cand) <= reach and not _crowded(cand, surfaces):
+					next = cand
+					break
 		next.path = true
 		surfaces.append(next)
 		cur = next
@@ -341,22 +360,21 @@ static func plan(run_seed: int, k: int) -> Dictionary:
 		var center := rng.randf() * TAU
 		var roll := rng.randf()
 		var s: Dictionary
-		if roll < 0.22:
-			s = wall_surface(band, Kind.LEDGE, top, center, ledge_width(band, rng.randf()), ledge_depth(band))
-		elif roll < 0.34:
-			s = balcony_surface(band, top, center)
+		# (balconies only come as the regular anchors, so they stay orderly)
+		if roll < 0.34:
+			s = wall_surface(k, Kind.LEDGE, top, center, ledge_width(band, rng.randf()), ledge_depth(band))
 		elif roll < 0.46:
-			s = wall_surface(band, Kind.PERCH, top, center, 0.9, 2.3)
+			s = wall_surface(k, Kind.PERCH, top, center, 0.9, 2.3)
 		elif roll < 0.62:
-			s = outer_surface(band, Kind.TURRET, top, center, rng.randf_range(3.6, 6.2), rng)
+			s = outer_surface(k, Kind.TURRET, top, center, rng.randf_range(3.8, 7.0), rng)
 		elif roll < 0.72 and band > 0:
-			s = outer_surface(band, Kind.ISLAND, top, center, rng.randf_range(3.6, 6.2), rng)
+			s = outer_surface(k, Kind.ISLAND, top, center, rng.randf_range(4.0, 7.2), rng)
 		elif roll < 0.84:
-			s = wall_surface(band, Kind.CRUMBLE, top, center, 2.2, 1.8)
+			s = wall_surface(k, Kind.CRUMBLE, top, center, 2.2, 1.8)
 		elif roll < 0.92 or band < 2:
-			s = wall_surface(band, Kind.FRAGILE, top, center, 2.4, 1.9)
+			s = wall_surface(k, Kind.FRAGILE, top, center, 2.4, 1.9)
 		else:
-			s = mover_surface(band, top, center, rng)
+			s = mover_surface(k, top, center, rng)
 		var clear: bool = s.top - hangs_below(s) > 0.5
 		for other in surfaces:
 			if conflicts(other, s):
@@ -390,14 +408,31 @@ static func plan(run_seed: int, k: int) -> Dictionary:
 				continue
 			var mid: float = (a.a0 + a.a1 + b.a0 + b.a1) * 0.25
 			pickups.append({"id": "%d:p%d" % [k, pickups.size()], "type": "poison", "theta": mid,
-				"r": TowerShape.wall_r(band, mid, 3.4), "y": (a.top + b.top) * 0.5 + 1.2})
+				"r": TowerShape.wall_r(k, mid, 3.4), "y": (a.top + b.top) * 0.5 + 1.2})
+
+	# Far out from the wall: a trail of seeds leading outward from a route
+	# ledge, or a gold feather hanging in open air. Worth the trip out.
+	if k >= START_CHUNKS:
+		for n in rng.randi_range(1, 2):
+			var s: Dictionary = path[rng.randi_range(0, path.size() - 1)]
+			if s.kind == Kind.RING or s.kind == Kind.GROUND or is_outer(s):
+				continue
+			var a: float = (s.a0 + s.a1) * 0.5 + rng.randf_range(-0.25, 0.25)
+			if rng.randf() < 0.35:
+				pickups.append({"id": "%d:p%d" % [k, pickups.size()], "type": "feather", "theta": a,
+					"r": TowerShape.wall_r(k, a, rng.randf_range(FAR_OUT.x, FAR_OUT.y)), "y": s.top + rng.randf_range(1.5, 3.0)})
+			else:
+				for j in 3:
+					var t := j / 2.0
+					pickups.append({"id": "%d:p%d" % [k, pickups.size()], "type": "seed", "theta": a,
+						"r": TowerShape.wall_r(k, a, lerp(3.2, FAR_OUT.y, t)), "y": s.top + 1.0 + t * 1.6})
 
 	for i in surfaces.size():
 		surfaces[i].id = "%d:%d" % [k, i]
 
 	return {
 		"k": k, "band": band, "base": base, "surfaces": surfaces,
-		"windows": _plan_windows(rng, band, base, surfaces, is_band_start(k), k == 0),
+		"windows": _plan_windows(rng, k, base, surfaces, is_band_start(k), k == 0),
 		"pickups": pickups, "ground": k == 0,
 		"drafts": _plan_drafts(rng, k, band, base, path),
 		"npcs": _plan_npcs(rng, k, surfaces),
@@ -414,14 +449,14 @@ static func _plan_drafts(rng: RandomNumberGenerator, k: int, band: int, base: fl
 	if rng.randf() < 0.35 and path.size() > 1:
 		var s: Dictionary = path[rng.randi_range(1, path.size() - 1)]
 		var a: float = (s.a1 if rng.randf() < 0.5 else s.a0) + rng.randf_range(-0.2, 0.2)
-		var r := TowerShape.wall_r(band, a, rng.randf_range(3.0, 4.5))
+		var r := TowerShape.wall_r(k, a, rng.randf_range(3.0, 4.5))
 		drafts.append({"up": true, "theta": a, "r": r, "radius": rng.randf_range(1.4, 2.0),
 			"y0": s.top - 3.0, "y1": s.top + rng.randf_range(6.0, 10.0)})
 	if band > 0 and rng.randf() < lerp(0.15, 0.35, d):
 		for attempt in 8:
 			var a := rng.randf() * TAU
 			var radius := rng.randf_range(1.3, 1.8)
-			var r := TowerShape.wall_r(band, a, rng.randf_range(1.5, 3.5))
+			var r := TowerShape.wall_r(k, a, rng.randf_range(1.5, 3.5))
 			var y0 := rng.randf_range(base, base + TowerShape.CHUNK_H - 4.0)
 			var y1 := y0 + rng.randf_range(5.0, 8.0)
 			var clear := true
@@ -453,21 +488,27 @@ static func _plan_npcs(rng: RandomNumberGenerator, k: int, surfaces: Array[Dicti
 		return npcs
 	var s: Dictionary = spots[rng.randi_range(0, spots.size() - 1)]
 	var a: float = lerp(s.a0, s.a1, rng.randf_range(0.25, 0.75))
-	var r: float = Vector2(s.cx, s.cz).length() if is_outer(s) else TowerShape.wall_r(s.band, a, s.d1 * 0.55)
+	var r: float = Vector2(s.cx, s.cz).length() if is_outer(s) else TowerShape.wall_r(s.k, a, s.d1 * 0.55)
 	var kinds := ["dove", "owl", "jay", "frog"]
 	npcs.append({"id": "%d:n0" % k, "kind": kinds[rng.randi_range(0, kinds.size() - 1)], "theta": a, "r": r,
 		"y": s.get("base_top", s.top), "line": rng.randi(), "surface": s.id if s.has("id") else "",
 		"talks": rng.randf() < 0.5})
 	return npcs
 
+static func _crowded(s: Dictionary, others: Array[Dictionary]) -> bool:
+	for o in others:
+		if o.kind != Kind.GROUND and o.kind != Kind.RING and conflicts(o, s):
+			return true
+	return false
+
 static func _pickup_over(k: int, type: String, n: int, s: Dictionary, lift: float) -> Dictionary:
 	var a: float = (s.a0 + s.a1) * 0.5
-	var r: float = Vector2(s.cx, s.cz).length() if is_outer(s) else TowerShape.wall_r(s.band, a, min(1.0, s.d1 * 0.5))
+	var r: float = Vector2(s.cx, s.cz).length() if is_outer(s) else TowerShape.wall_r(s.k, a, min(1.0, s.d1 * 0.5))
 	return {"id": "%d:p%d" % [k, n], "type": type, "theta": a, "r": r, "y": s.top + lift}
 
-static func _place_beside(cur: Dictionary, kind: int, band: int, top: float, dir: float, gap: float, width: float, depth: float, dist: float, rng: RandomNumberGenerator) -> Dictionary:
-	var ang_gap := TowerShape.angle_for_len(band, gap)
-	var ang_w := TowerShape.angle_for_len(band, width, depth * 0.5)
+static func _place_beside(cur: Dictionary, kind: int, k: int, top: float, dir: float, gap: float, width: float, depth: float, dist: float, rng: RandomNumberGenerator) -> Dictionary:
+	var ang_gap := TowerShape.angle_for_len(k, gap)
+	var ang_w := TowerShape.angle_for_len(k, width, depth * 0.5)
 	var a0: float
 	var a1: float
 	if cur.kind == Kind.GROUND or cur.kind == Kind.RING:
@@ -484,20 +525,25 @@ static func _place_beside(cur: Dictionary, kind: int, band: int, top: float, dir
 	if kind == Kind.TURRET or kind == Kind.ISLAND:
 		# Same rng draws every retry, so a pulled-in retry keeps its shape
 		var state := rng.state
-		var s := outer_surface(band, kind, top, (a0 + a1) * 0.5, dist, rng)
+		var s := outer_surface(k, kind, top, (a0 + a1) * 0.5, dist, rng)
 		rng.state = state
 		return s
-	return _strip(band, kind, top, a0, a1, 0.0, depth)
+	return _strip(k, kind, top, a0, a1, 0.0, depth)
 
-static func _plan_windows(rng: RandomNumberGenerator, band: int, base: float, surfaces: Array[Dictionary], rose: bool, ground: bool) -> Array[Dictionary]:
-	var n := TowerShape.sides(band)
-	var fw := TowerShape.face_width(band)
+static func _plan_windows(rng: RandomNumberGenerator, k: int, base: float, surfaces: Array[Dictionary], rose: bool, ground: bool) -> Array[Dictionary]:
+	var n := TowerShape.sides(k)
+	var fw := TowerShape.face_width(k)
 	var half_face := PI / n
 	var windows: Array[Dictionary] = []
 	var hue := rng.randf()
 
 	if ground:
 		windows.append({"face": 0, "y": 0.0, "w": min(fw * 0.5, 1.8), "h": 2.8, "style": 2, "seed": 0.0, "hue": hue})
+	# A doorway behind every balcony
+	for s in surfaces:
+		if s.kind == Kind.BALCONY:
+			var face := TowerShape.nearest_face(k, (s.a0 + s.a1) * 0.5)
+			windows.append({"face": face, "y": s.top, "w": min(fw * 0.42, 1.4), "h": 2.4, "style": 2, "seed": 0.0, "hue": hue})
 	if rose:
 		for f in range(0, n, 2):
 			var size: float = min(2.2, fw * 0.62)
@@ -511,7 +557,7 @@ static func _plan_windows(rng: RandomNumberGenerator, band: int, base: float, su
 		var h := rng.randf_range(1.8, 2.8)
 		var w: float = clamp(fw * 0.32, 0.7, 1.3)
 		var y := rng.randf_range(base + 1.0, base + TowerShape.CHUNK_H - h - 0.6)
-		var c := TowerShape.face_center(band, face)
+		var c := TowerShape.face_center(k, face)
 		var span := {"a0": c - half_face * 0.6, "a1": c + half_face * 0.6}
 		var ok := true
 		for s in surfaces:

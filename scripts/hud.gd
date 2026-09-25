@@ -80,9 +80,17 @@ static func make_label(font_size: int, color: Color) -> Label:
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return l
 
+var _shown_heights := Vector2i(-1, -1)
+
+# (Only touch the labels when the numbers change: re-laying-out text every
+# frame adds up on phones)
 func set_heights(height: float, best: float) -> void:
-	height_label.text = "%d m" % int(max(height, 0.0))
-	best_label.text = "Best  %d m" % int(best) if best > 0.0 else ""
+	var now := Vector2i(int(max(height, 0.0)), int(best))
+	if now == _shown_heights:
+		return
+	_shown_heights = now
+	height_label.text = "%d m" % now.x
+	best_label.text = "Best  %d m" % now.y if best > 0.0 else ""
 
 func set_stamina(value: float, bucket: float) -> void:
 	if abs(value - stamina) > 0.001 or bucket != max_stamina:

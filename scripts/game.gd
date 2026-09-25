@@ -25,6 +25,7 @@ var weather: Weather
 var clouds: CloudLayers
 var flocks: BackgroundBirds
 var rivals: Climbers
+var strikes: LightningStrikes
 var hud: Hud
 var touch: TouchControls
 var title_panel: Control
@@ -39,6 +40,8 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_setup_input()
 	var args := OS.get_cmdline_user_args()
+	Tuning.low_quality = args.has("--low") or OS.has_feature("mobile") or OS.has_feature("web_android") \
+		or OS.has_feature("web_ios") or DisplayServer.is_touchscreen_available()
 	shots_mode = OS.is_debug_build() and args.has("--shots")
 	record_mode = OS.is_debug_build() and args.has("--record")
 	if not record_mode:
@@ -115,6 +118,11 @@ func _build_view() -> void:
 	player.is_npc = false
 	player.tower = tower
 	world.add_child(player)
+	strikes = LightningStrikes.new()
+	strikes.tower = tower
+	strikes.player = player
+	strikes.weather = weather
+	world.add_child(strikes)
 	rivals = Climbers.new()
 	rivals.tower = tower
 	rivals.player = player
@@ -288,6 +296,7 @@ func _physics_process(delta: float) -> void:
 		return
 	tower.stream(player.y)
 	tower.tick(delta)
+	strikes.update(delta)
 
 func _process(delta: float) -> void:
 	weather.update(delta, player.world_position(), camera.cam_theta)
@@ -311,7 +320,7 @@ func _process(delta: float) -> void:
 		_write_save()
 	if debug_label.visible:
 		debug_label.text = "fps %d\ny %.1f  band %d (%d sides)\ntheta %.2f  r %.2f\nstamina %.2f  wind %.2f\nchunks %d" % [
-			Engine.get_frames_per_second(), player.y, band, TowerShape.sides(band),
+			Engine.get_frames_per_second(), player.y, band, TowerShape.sides(TowerShape.chunk_at(player.y)),
 			player.theta, player.r, player.stamina, weather.wind, tower.chunks.size()]
 
 func _notification(what: int) -> void:
@@ -380,7 +389,7 @@ func _debug_key(key: int) -> void:
 			b = max(b, 0)
 			var y := b * TowerShape.BAND_H + (0.0 if b == 0 else 0.5)
 			tower.stream(y, true)
-			player.place(player.theta, TowerShape.apothem(b) + 1.0, y)
+			player.place(player.theta, TowerShape.apothem(b * TowerShape.CHUNKS_PER_BAND) + 1.0, y)
 			camera.snap()
 		KEY_F3:
 			debug_label.visible = not debug_label.visible
@@ -394,6 +403,7 @@ func _take_shots() -> void:
 	title_panel.visible = false
 	hud.visible = true
 	touch.visible = true
+	touch.used = true                # show the phone controls too
 	state = State.PLAYING
 	# Each weather band from its start, then one of each special platform
 	var spots: Array = [["ground", 0.0]]
@@ -423,13 +433,13 @@ func _take_shots() -> void:
 				if cand.id == spots[i][2]:
 					s = cand
 		var a: float = (s.a0 + s.a1) * 0.5
-		var r: float = TowerShape.wall_r(s.band, a, 1.0)
+		var r: float = TowerShape.wall_r(s.k, a, 1.0)
 		if ChunkPlanner.is_outer(s):
 			a = atan2(s.cx, s.cz)
 			r = Vector2(s.cx, s.cz).length()
 		elif s.kind == ChunkPlanner.Kind.GROUND or s.kind == ChunkPlanner.Kind.RING:
 			a = 0.0
-			r = TowerShape.apothem(s.band) + 1.0
+			r = TowerShape.apothem(s.k) + 1.0
 		var airborne: bool = spots[i][0] == "airborne" or spots[i][0] == "updraft"
 		if spots[i][0] == "updraft":
 			var d: Dictionary = spots[i][3]
@@ -454,6 +464,10 @@ func _take_shots() -> void:
 			# A storm flock, caught in a lightning flash
 			flocks.spawn(camera, player.y)
 			for f in 150:
+				await get_tree().process_frame
+			# ...and a bolt hitting a ledge beside the bird
+			strikes.pending.append({"pos": player.world_position() + Vector3(0, 3.0, 0), "t": 0.0, "fx": null})
+			for f in 3:
 				await get_tree().process_frame
 			weather.flash = 1.0
 			await get_tree().process_frame
@@ -494,7 +508,7 @@ func _record_attract() -> void:
 	for clip in clips:
 		var s: Dictionary = clip[1]
 		var a: float = (s.a0 + s.a1) * 0.5 if s.kind != ChunkPlanner.Kind.GROUND else 0.0
-		var r: float = TowerShape.wall_r(s.band, a, min(1.0, s.d1 * 0.5)) if s.kind != ChunkPlanner.Kind.GROUND else TowerShape.apothem(0) + 1.5
+		var r: float = TowerShape.wall_r(s.k, a, min(1.0, s.d1 * 0.5)) if s.kind != ChunkPlanner.Kind.GROUND else TowerShape.apothem(0) + 1.5
 		_load_world(clip[0], a, r, s.top, s.top, Tuning.STAMINA_CAP)
 		_play()
 		if TowerShape.band_at(s.top) == 3:

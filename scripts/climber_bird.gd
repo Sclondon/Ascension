@@ -5,17 +5,32 @@ extends Player
 # walk toward the next ledge, rest until there's stamina for the jump, jump,
 # and flap when it's dropping below where it wants to land. It's not perfect,
 # so rivals sometimes slip and fall.
+#
+# Flyers are the showoffs: a bottomless stamina bucket, so they never rest,
+# aim a few ledges ahead and just flap their way up past you.
 
 const TINTS := [Color(0.6, 0.62, 0.7), Color(0.62, 0.45, 0.3), Color(0.35, 0.55, 0.9), Color(0.85, 0.85, 0.8)]
+const FLYER_TINT := Color(0.95, 0.72, 0.28)   # golden
 
 var target: Dictionary = {}
 var since_flap := 0.0
 var grounded_time := 0.0
 var patience := 0.0                  # a little random hesitation before each jump
+var flyer := false
+var retarget_timer := 0.0
 
 func _init() -> void:
 	is_npc = true
 	active = true
+
+# Climbers are quicker and hardier than you; flyers barely need to land
+func make(is_flyer: bool) -> void:
+	flyer = is_flyer
+	dress(FLYER_TINT if flyer else TINTS[randi_range(0, TINTS.size() - 1)])
+	max_stamina = 99999.0 if flyer else 250.0
+	stamina = max_stamina
+	regen_rate = 110.0
+	speed_mult = 1.4 if flyer else 1.25
 
 func dress(tint: Color) -> void:
 	frames_idle = Npc.recoloured(IDLE_FRAMES, tint)
@@ -25,8 +40,16 @@ func dress(tint: Color) -> void:
 func _physics_process(delta: float) -> void:
 	since_flap += delta
 	grounded_time = grounded_time + delta if grounded else 0.0
-	if grounded or target.is_empty():
+	retarget_timer -= delta
+	if (grounded and retarget_timer <= 0.0) or target.is_empty():
+		retarget_timer = 0.2
 		_retarget()
+	elif flyer and y > target.top - 1.0:
+		# Flyers don't wait to land: once level with the target, aim higher
+		var path := tower.path_around(y)
+		var above := path.filter(func(s): return s.top > y + 2.0)
+		if not above.is_empty():
+			target = above[min(2, above.size() - 1)]
 	super(delta)
 
 func _retarget() -> void:
@@ -37,8 +60,9 @@ func _retarget() -> void:
 			if path[i].id == ground.id:
 				from = i
 	var next: Dictionary = {}
+	var ahead := 3 if flyer else 1
 	if from >= 0 and from + 1 < path.size():
-		next = path[from + 1]
+		next = path[min(from + ahead, path.size() - 1)]
 	else:
 		for s in path:
 			if s.top > y + 0.3:
@@ -46,7 +70,7 @@ func _retarget() -> void:
 				break
 	if next.get("id", "") != target.get("id", "-"):
 		target = next
-		patience = randf_range(0.2, 1.2)
+		patience = randf_range(0.0, 0.35)
 
 func read_input() -> Dictionary:
 	var out := {"ax": 0.0, "ar": 0.0, "jump_pressed": false, "jump_held": vy > 0.0}
@@ -57,10 +81,12 @@ func read_input() -> Dictionary:
 	if t.kind != ChunkPlanner.Kind.RING:
 		var inside := wrapf(theta - t.a0, -PI, PI) > 0.05 and wrapf(t.a1 - theta, -PI, PI) > 0.05
 		if not inside:
-			out.ax = clamp(wrapf(c - theta, -PI, PI) * r * 1.5, -1.0, 1.0)
+			# Full speed until over the ledge (easing in made every hop slow)
+			var off := wrapf(c - theta, -PI, PI) * r
+			out.ax = sign(off) if abs(off) > 0.3 else off / 0.3
 	var d_goal: float = (t.d0 + t.d1) * 0.5 if ChunkPlanner.is_outer(t) else min(1.0, (t.d1 - t.d0) * 0.5) + t.d0
-	var want_r := TowerShape.wall_r(TowerShape.band_at(y + 0.05), theta, max(d_goal, Tuning.WALL_MARGIN))
-	out.ar = clamp((want_r - r) * 2.0, -1.0, 1.0)
+	var want_r := TowerShape.wall_r(TowerShape.chunk_at(y + 0.05), theta, max(d_goal, Tuning.WALL_MARGIN))
+	out.ar = clamp((want_r - r) * 4.0, -1.0, 1.0)
 	if grounded:
 		var arc: float = abs(wrapf(c - theta, -PI, PI)) * r - (t.a1 - t.a0) * r * 0.5
 		if ChunkPlanner.is_outer(t):
@@ -71,12 +97,19 @@ func read_input() -> Dictionary:
 		while need < 3 and Tuning.air_distance(t.top - y, need) < 0.0:
 			need += 1
 		var rested := stamina >= Tuning.JUMP_COST + (need + 1) * Tuning.FLAP_COST or stamina >= max_stamina - 0.5
+		if flyer:
+			rested = true
+			reach = 99.0
 		if not rested or grounded_time < patience:
 			out.ax = 0.0
 			out.ar = 0.0
 		elif (reach > 0.0 and arc < reach * 0.8) or grounded_time > 6.0:
 			out.jump_pressed = true
-	elif vy < 0.0 and y < t.top + 0.4 and since_flap > 0.2 and stamina >= Tuning.FLAP_COST:
+	elif flyer and vy < 2.0 and y < t.top + 2.5 and since_flap > 0.18:
+		out.jump_pressed = true
+		since_flap = 0.0
+	elif vy < 0.0 and y < t.top + 0.6 and since_flap > 0.2 and stamina >= Tuning.FLAP_COST and not TowerChunk.contains(t, theta, r, 0.1):
+		# Flap to stay up only when it isn't already over its landing spot
 		out.jump_pressed = true
 		since_flap = 0.0
 	return out

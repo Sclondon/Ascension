@@ -72,6 +72,9 @@ func _ready() -> void:
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_energy = 1.0
 	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	# Ambient comes from a colour and nothing is reflective, so the sky never
+	# needs baking into a radiance map (costly on phones every time it changes)
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 	env.fog_enabled = true
 	env.fog_sky_affect = 0.25
 	var we := WorldEnvironment.new()
@@ -83,13 +86,13 @@ func _ready() -> void:
 	sun.shadow_enabled = false       # the blob shadow does the job, and it's cheap on phones
 	add_child(sun)
 
-	emitters.rain = _emitter(500, 0.9, Vector3(0.025, 0.55, 1), Color(0.7, 0.8, 1.0, 0.55), Vector3(9, 0.5, 9), 20.0, 5.0, true)
-	emitters.snow = _emitter(260, 7.0, Vector3(0.09, 0.09, 1), Color(1, 1, 1, 0.9), Vector3(10, 0.5, 10), 1.2, 35.0, false)
-	emitters.mist = _emitter(36, 7.0, Vector3(3.0, 1.6, 1), Color(1, 1, 1, 0.13), Vector3(9, 6, 9), 0.25, 180.0, false)
-	emitters.sparkle = _emitter(70, 3.0, Vector3(0.07, 0.07, 1), Color(0.6, 1.0, 0.8, 1.0), Vector3(9, 6, 9), 0.3, 180.0, false)
+	emitters.rain = _emitter(Tuning.particles(500), 0.9, Vector3(0.025, 0.55, 1), Color(0.7, 0.8, 1.0, 0.55), Vector3(9, 0.5, 9), 20.0, 5.0, true)
+	emitters.snow = _emitter(Tuning.particles(260), 7.0, Vector3(0.09, 0.09, 1), Color(1, 1, 1, 0.9), Vector3(10, 0.5, 10), 1.2, 35.0, false)
+	emitters.mist = _emitter(Tuning.particles(36), 7.0, Vector3(3.0, 1.6, 1), Color(1, 1, 1, 0.13), Vector3(9, 6, 9), 0.25, 180.0, false)
+	emitters.sparkle = _emitter(Tuning.particles(70), 3.0, Vector3(0.07, 0.07, 1), Color(0.6, 1.0, 0.8, 1.0), Vector3(9, 6, 9), 0.3, 180.0, false)
 
 	wind_fx = CPUParticles3D.new()
-	wind_fx.amount = 40
+	wind_fx.amount = Tuning.particles(40)
 	wind_fx.lifetime = 0.9
 	wind_fx.local_coords = false
 	wind_fx.emitting = false
@@ -163,13 +166,13 @@ func update(delta: float, focus: Vector3, theta: float) -> void:
 	current = sample(focus.y)
 	var w := current
 
-	sky_mat.set_shader_parameter("top_color", w.top)
-	sky_mat.set_shader_parameter("horizon_color", w.horizon)
-	sky_mat.set_shader_parameter("bottom_color", w.bottom)
-	sky_mat.set_shader_parameter("sun_color", w.light)
-	sky_mat.set_shader_parameter("sun_amount", w.sun)
-	sky_mat.set_shader_parameter("stars", w.stars)
-	sky_mat.set_shader_parameter("aurora", w.aurora)
+	_sky("top_color", w.top)
+	_sky("horizon_color", w.horizon)
+	_sky("bottom_color", w.bottom)
+	_sky("sun_color", w.light)
+	_sky("sun_amount", w.sun)
+	_sky("stars", w.stars)
+	_sky("aurora", w.aurora)
 
 	# Fog thickens as you near a cloud deck
 	var deck_band := roundi(focus.y / TowerShape.BAND_H)
@@ -188,7 +191,7 @@ func update(delta: float, focus: Vector3, theta: float) -> void:
 			lightning_timer = randf_range(3.5, 9.0)
 			flash = 1.0
 			lightning.emit()
-	sky_mat.set_shader_parameter("flash", flash * 0.6)
+	_sky("flash", flash * 0.6)
 	sun.light_color = w.light
 	sun.light_energy = w.light_energy + flash * 2.0
 	# How brightly lit unshaded things (clouds) should look right now
@@ -221,3 +224,16 @@ func update(delta: float, focus: Vector3, theta: float) -> void:
 		if on:
 			e.global_position = focus + (Vector3(0, 9, 0) if key == "rain" or key == "snow" else Vector3(0, 1, 0))
 			e.gravity = tangent * (3.0 if key == "rain" else 1.0)
+
+var _sky_cache := {}
+
+# Only pass sky values that actually changed (most frames, none do)
+func _sky(param: String, value) -> void:
+	if _sky_cache.get(param) != value:
+		_sky_cache[param] = value
+		sky_mat.set_shader_parameter(param, value)
+
+# A lightning flash right now (for a strike on the tower)
+func flash_now() -> void:
+	flash = 1.0
+	lightning.emit()

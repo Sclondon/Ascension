@@ -9,10 +9,10 @@ const TERMINAL_VY := -26.0
 const JUMP_SPEED := 13.5             # ground jump: ~3 m, free
 const FLAP_SPEED := 11.0             # air flap: ~2 m more, costs stamina
 
-# One stamina bucket. A flap always costs a third of the starting bucket;
+# One stamina bucket. A flap costs 33 (about a quarter of the starting bucket);
 # gold feathers make the bucket bigger (up to the cap).
-const BASE_STAMINA := 100.0
-const STAMINA_CAP := 200.0
+const BASE_STAMINA := 125.0
+const STAMINA_CAP := 250.0
 const FLAP_COST := 33.0
 const JUMP_COST := 20.0             # the jump off the ground costs a bit too
 const REGEN_RATE := 55.0             # per second while standing
@@ -23,7 +23,7 @@ const FEATHER_REFILL := 33.0         # and it tops you up by one flap
 # Holding jump while falling glides: gravity barely pulls, drains stamina
 const GLIDE_GRAVITY := 0.12          # fraction of normal gravity while gliding
 const GLIDE_MAX_SINK := 5.0          # glide never falls faster than this (m/s)
-const GLIDE_COST := 24.0             # stamina per second
+const GLIDE_COST := 8.0              # stamina per second (a full bar glides ~15 s)
 const GLIDE_BRAKE := 45.0            # how quickly a fast fall slows into a glide
 
 # Air columns: push per second squared while inside (gravity is 30)
@@ -51,7 +51,7 @@ const STUN_FALL := 14.0              # falls longer than this stun briefly
 const STUN_TIME := 0.45
 
 # The generator assumes a jump plus this many flaps for a path jump:
-# 20 + 2 x 33 = 86 of the starting 100, so there's a little to spare.
+# 20 + 2 x 33 = 86 of the starting 125, so there's plenty to spare.
 const PATH_FLAPS := 2
 
 # Horizontal distance covered by a jump that lands dy above the take-off
@@ -89,3 +89,11 @@ static func max_jump_height(flaps: int) -> float:
 # in/out is slower, so the longer of the two (scaled) sets the time needed.
 static func hop_length(tangential: float, radial: float) -> float:
 	return max(tangential, radial * RUN_SPEED / RADIAL_SPEED)
+
+# Phones get lighter effects (fewer particles and cloud layers). Set by the
+# game at startup: on for touch devices, or with `-- --low`.
+static var low_quality := false
+
+# Scale a particle count for the current quality
+static func particles(n: int) -> int:
+	return maxi(1, int(n * (0.4 if low_quality else 1.0)))

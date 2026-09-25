@@ -121,7 +121,7 @@ static func _spot_on(s: Dictionary) -> Vector3:
 		var off: Vector2 = Vector2.from_angle(randf() * TAU) * randf() * s.radius * 0.55
 		return Vector3(s.cx + off.x, top, s.cz + off.y)
 	var a: float = lerp(s.a0, s.a1, randf_range(0.15, 0.85))
-	var r := TowerShape.wall_r(s.band, a, randf_range(0.5, max(0.6, s.d1 - 0.4)))
+	var r := TowerShape.wall_r(s.k, a, randf_range(0.5, max(0.6, s.d1 - 0.4)))
 	return Vector3(sin(a) * r, top, cos(a) * r)
 
 # A crow animation recoloured: its dark body takes the tint, shaded by the

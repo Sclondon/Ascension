@@ -3,6 +3,9 @@ class_name TowerShape
 # for building footprints that hug its flat faces. No nodes, so the headless
 # reachability test can use it too.
 #
+# Shape functions take a chunk index `k`: the side count, rotation and tint
+# come from the chunk's band, while the thickness varies chunk by chunk.
+#
 # Angle convention: a point at angle theta and radius r sits at
 # (sin(theta) * r, y, cos(theta) * r). Theta grows to the camera's right.
 
@@ -28,55 +31,62 @@ static func band_of_chunk(k: int) -> int:
 static func band_at(y: float) -> int:
 	return band_of_chunk(chunk_at(y))
 
-static func sides(band: int) -> int:
-	return BAND_SIDES[band % BAND_SIDES.size()]
+static func sides(k: int) -> int:
+	return BAND_SIDES[band_of_chunk(k) % BAND_SIDES.size()]
 
-static func apothem(band: int) -> float:
-	return BAND_APOTHEM[band % BAND_APOTHEM.size()]
+# The tower swells and narrows from chunk to chunk (the opening chunks and
+# each band's first chunk keep the band's standard size)
+static func thickness(k: int) -> float:
+	if k < 2 or k % CHUNKS_PER_BAND == 0:
+		return 1.0
+	return 1.0 + 0.16 * sin(k * 0.87 + band_of_chunk(k) * 1.7) + 0.07 * sin(k * 2.3)
 
-static func tint(band: int) -> Color:
-	return BAND_TINT[band % BAND_TINT.size()]
+static func apothem(k: int) -> float:
+	return BAND_APOTHEM[band_of_chunk(k) % BAND_APOTHEM.size()] * thickness(k)
 
-static func face_offset(band: int) -> float:
+static func tint(k: int) -> Color:
+	return BAND_TINT[band_of_chunk(k) % BAND_TINT.size()]
+
+static func face_offset(k: int) -> float:
 	# Band 0 has a face centred on theta = 0, where the climb starts
-	return band * 0.37
+	return band_of_chunk(k) * 0.37
 
 static func difficulty(band: int) -> float:
 	return clamp(band / 6.0, 0.0, 1.0)
 
-static func face_step(band: int) -> float:
-	return TAU / sides(band)
+static func face_step(k: int) -> float:
+	return TAU / sides(k)
 
-static func face_center(band: int, i: int) -> float:
-	return face_offset(band) + i * face_step(band)
+static func face_center(k: int, i: int) -> float:
+	return face_offset(k) + i * face_step(k)
 
-static func face_width(band: int) -> float:
-	return 2.0 * apothem(band) * tan(PI / sides(band))
+static func face_width(k: int) -> float:
+	return 2.0 * apothem(k) * tan(PI / sides(k))
 
 # Angle relative to the centre of the nearest face, in [-step/2, step/2)
-static func rel_angle(band: int, theta: float) -> float:
-	var step := face_step(band)
-	return fposmod(theta - face_offset(band) + step * 0.5, step) - step * 0.5
+static func rel_angle(k: int, theta: float) -> float:
+	var step := face_step(k)
+	return fposmod(theta - face_offset(k) + step * 0.5, step) - step * 0.5
 
-static func nearest_face(band: int, theta: float) -> int:
-	var step := face_step(band)
-	return posmod(roundi((theta - face_offset(band)) / step), sides(band))
+static func nearest_face(k: int, theta: float) -> int:
+	var step := face_step(k)
+	return posmod(roundi((theta - face_offset(k)) / step), sides(k))
 
 # Radius of the n-gon (offset outward by d) along the ray at theta
-static func wall_r(band: int, theta: float, d := 0.0) -> float:
-	return (apothem(band) + d) / cos(rel_angle(band, theta))
+static func wall_r(k: int, theta: float, d := 0.0) -> float:
+	return (apothem(k) + d) / cos(rel_angle(k, theta))
 
-static func ring_point(band: int, theta: float, d: float) -> Vector2:
-	var r := wall_r(band, theta, d)
+static func ring_point(k: int, theta: float, d: float) -> Vector2:
+	var r := wall_r(k, theta, d)
 	return Vector2(sin(theta) * r, cos(theta) * r)
 
 static func polar_point(theta: float, r: float) -> Vector2:
 	return Vector2(sin(theta) * r, cos(theta) * r)
 
 # Corner angles strictly between a0 and a1 (a0 < a1)
-static func corners_between(band: int, a0: float, a1: float) -> Array[float]:
-	var step := face_step(band)
-	var first := face_offset(band) + step * 0.5
+static func corners_between(k: int, a0: float, a1: float) -> Array[float]:
+	var step := face_step(k)
+	var first := face_offset(k) + step * 0.5
 	var out: Array[float] = []
 	var j := ceili((a0 - first) / step)
 	var c := first + j * step
@@ -88,15 +98,15 @@ static func corners_between(band: int, a0: float, a1: float) -> Array[float]:
 
 # A simple polygon (XZ plane) covering angles a0..a1 between offsets d0 and d1
 # from the wall, following the n-gon's flat faces and corners.
-static func strip_polygon(band: int, a0: float, a1: float, d0: float, d1: float) -> PackedVector2Array:
+static func strip_polygon(k: int, a0: float, a1: float, d0: float, d1: float) -> PackedVector2Array:
 	var angles: Array[float] = [a0]
-	angles.append_array(corners_between(band, a0, a1))
+	angles.append_array(corners_between(k, a0, a1))
 	angles.append(a1)
 	var pts := PackedVector2Array()
 	for a in angles:
-		pts.append(ring_point(band, a, d0))
+		pts.append(ring_point(k, a, d0))
 	for i in range(angles.size() - 1, -1, -1):
-		pts.append(ring_point(band, angles[i], d1))
+		pts.append(ring_point(k, angles[i], d1))
 	return pts
 
 # An arc-shaped polygon on true circles (used for things that move around the tower)
@@ -109,17 +119,17 @@ static func arc_polygon(a0: float, a1: float, r0: float, r1: float, segments := 
 	return pts
 
 # Walking distance along the wall (at offset d) from a0 to a1 (a0 <= a1)
-static func perimeter_len(band: int, a0: float, a1: float, d := 0.5) -> float:
+static func perimeter_len(k: int, a0: float, a1: float, d := 0.5) -> float:
 	if a1 <= a0:
 		return 0.0
-	var prev := ring_point(band, a0, d)
+	var prev := ring_point(k, a0, d)
 	var total := 0.0
-	for c in corners_between(band, a0, a1):
-		var p := ring_point(band, c, d)
+	for c in corners_between(k, a0, a1):
+		var p := ring_point(k, c, d)
 		total += prev.distance_to(p)
 		prev = p
-	return total + prev.distance_to(ring_point(band, a1, d))
+	return total + prev.distance_to(ring_point(k, a1, d))
 
 # Rough metres -> radians along the wall, good enough for placing things
-static func angle_for_len(band: int, length: float, d := 0.5) -> float:
-	return length / (apothem(band) * 1.04 + d)
+static func angle_for_len(k: int, length: float, d := 0.5) -> float:
+	return length / (apothem(k) * 1.04 + d)
