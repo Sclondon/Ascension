@@ -104,3 +104,8 @@ const WIRE_DIP_BOOST := 11.0         # more still, per metre the wire is bent do
 const RING_LIFT := 10.0              # upward speed a boost ring gives
 const RING_PUSH := 6.0               # and a shove along the way you're going
 const RING_STAMINA := 15.0
+
+# Power-ups: how long each lasts (seconds)
+const POWER_TIME := {"sunseed": 10.0, "spring": 12.0, "cloud": 12.0, "charm": 15.0}
+const SPRING_MULT := 1.4             # jump / flap speed with a Spring Berry
+const CLOUD_GRAVITY := 0.45          # falling gravity with a Cloud Puff

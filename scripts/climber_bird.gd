@@ -39,6 +39,19 @@ func make(is_flyer: bool) -> void:
 	patience_max = randf_range(0.05, 1.0)
 	flap_every = randf_range(0.14, 0.34)
 
+# Somewhere to say things (the Climbers manager decides what and when)
+var bubble: SpeechBubble
+var chatter_cool := 3.0
+var was_above := false               # relative to the player, for passing remarks
+
+func say(line: String) -> void:
+	if bubble == null:
+		bubble = SpeechBubble.new()
+		bubble.position = Vector3(0, 1.6, 0)
+		add_child(bubble)
+	bubble.say(line, 2.6)
+	chatter_cool = randf_range(4.0, 7.0)
+
 func dress(tint: Color) -> void:
 	frames_idle = Npc.recoloured(IDLE_FRAMES, tint)
 	frames_flap = Npc.recoloured(FLAP_FRAMES, tint)

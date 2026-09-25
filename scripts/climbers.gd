@@ -11,6 +11,13 @@ const BUMP_HEIGHT := 1.3
 const SHOVE := 6.5                   # m/s knock from a sideways bump
 const STOMP_BOUNCE := 11.0
 
+const TAUNTS := ["Too slow!", "See you at the top!", "Keep up, featherbrain.", "Caw caw caw!", "Nice view from up here."]
+const FLYER_TAUNTS := ["Ever tried flying?", "Wings, friend. Use them.", "Byeee!"]
+const MAD := ["Hey!", "No fair!", "Show-off.", "I was resting!", "Oh, come ON."]
+const BUMPED := ["Watch it!", "Oof!", "Mind the feathers!"]
+const MUTTER := ["My wings ache.", "How high does it go?", "Don't look down. Don't look down.", "Is it getting darker?",
+	"Was that ledge there before?", "Almost... almost...", "I smell rain.", "Why did I start this."]
+
 var tower: TowerGenerator
 var player: Player
 var birds: Array[ClimberBird] = []
@@ -40,6 +47,30 @@ func _physics_process(delta: float) -> void:
 		bump_cooldown[b] = max(bump_cooldown.get(b, 0.0) - delta, 0.0)
 		if bump_cooldown[b] <= 0.0 and _bump(player, b):
 			bump_cooldown[b] = 0.35
+			if b.chatter_cool <= 0.0:
+				b.say(BUMPED.pick_random())
+		_chatter(b, delta)
+
+# Passing remarks: a taunt when it overtakes you, a huff when you overtake
+# it, and the odd mutter to itself
+func _chatter(b: ClimberBird, delta: float) -> void:
+	b.chatter_cool -= delta
+	if b.bubble:
+		b.bubble.tick(delta, false)
+	var near := b.world_position().distance_to(player.world_position()) < 9.0
+	var above := b.y > player.y + 1.5
+	var below := b.y < player.y - 1.5
+	if near and b.chatter_cool <= 0.0:
+		if above and not b.was_above:
+			b.say((FLYER_TAUNTS if b.flyer else TAUNTS).pick_random())
+		elif below and b.was_above:
+			b.say(MAD.pick_random())
+		elif randf() < delta * 0.06:
+			b.say(MUTTER.pick_random())
+	if above:
+		b.was_above = true
+	elif below:
+		b.was_above = false
 
 # A rival appears on a route ledge a little below you, so it climbs past
 func _spawn() -> void:

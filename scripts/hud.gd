@@ -17,6 +17,13 @@ var stamina := Tuning.BASE_STAMINA
 var max_stamina := Tuning.BASE_STAMINA
 var deny_time := 0.0
 var pulse_time := 0.0                # border flash after a pickup
+var powers := {}
+var power_row: Control
+
+const POWER_NAMES := {
+	"sunseed": "Sun Seed: endless stamina!", "spring": "Spring Berry: super jumps!",
+	"cloud": "Cloud Puff: feather-light falls!", "charm": "Crow's Charm: treasure comes to you!",
+}
 var pulse_color := Color.WHITE
 var banner_time := 0.0
 
@@ -49,6 +56,15 @@ func _ready() -> void:
 	meter.draw.connect(_draw_meter)
 	meter.resized.connect(meter.queue_redraw)
 	add_child(meter)
+
+	# Active power-ups: an icon each, with a draining bar under it
+	power_row = Control.new()
+	power_row.position = Vector2(24, 24)
+	power_row.size = Vector2(240, 60)
+	power_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	power_row.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	power_row.draw.connect(_draw_powers)
+	add_child(power_row)
 
 	pause_button = Button.new()
 	pause_button.text = "II"
@@ -108,6 +124,23 @@ func pickup(kind: String) -> void:
 	pulse_color = {"seed": Color(0.5, 1.0, 0.4, 0.8), "poison": Color(0.7, 0.2, 0.9, 0.85)}.get(kind, Color(1, 0.9, 0.4, 0.8))
 	meter.queue_redraw()
 
+func set_powers(p: Dictionary) -> void:
+	if p.is_empty() and powers.is_empty():
+		return
+	powers = p.duplicate()
+	power_row.queue_redraw()
+	meter.queue_redraw()
+
+func _draw_powers() -> void:
+	var x := 0.0
+	for kind in powers:
+		var tex := TowerChunk._texture_for(kind)
+		power_row.draw_texture_rect(tex, Rect2(x, 0, 36, 36), false)
+		var left: float = clamp(powers[kind] / Tuning.POWER_TIME[kind], 0.0, 1.0)
+		power_row.draw_rect(Rect2(x, 40, 36, 6), Color(0.08, 0.04, 0.12, 0.7))
+		power_row.draw_rect(Rect2(x, 40, 36 * left, 6), TowerChunk.GLOWS[kind])
+		x += 46.0
+
 func show_banner(text: String) -> void:
 	banner.text = text
 	banner_time = 3.0
@@ -141,6 +174,9 @@ func _draw_meter() -> void:
 	var deny := deny_time > 0.0 and int(deny_time * 20.0) % 2 == 0
 	var empty := Color(0.08, 0.04, 0.12, 0.55)
 	var fill_c := Color(1.0, 0.8, 0.25, 0.9) if stamina >= Tuning.FLAP_COST else Color(0.9, 0.4, 0.15, 0.9)
+	if powers.has("sunseed"):
+		# Endless stamina: the border shimmers white-gold
+		fill_c = Color(1.0, 0.85, 0.4).lerp(Color.WHITE, 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012))
 	if deny:
 		empty = Color(0.8, 0.1, 0.1, 0.7)
 	elif pulse_time > 0.0:

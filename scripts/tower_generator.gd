@@ -12,9 +12,12 @@ var chunks := {}                     # chunk index -> TowerChunk
 var time := 0.0
 var glow := 1.0
 var collected := {}                  # gold feather ids taken this run
+var meadow: Meadow
 
 func _ready() -> void:
 	add_child(TowerChunk.make_ground())
+	meadow = Meadow.new()
+	add_child(meadow)
 
 func reset(new_seed: int, taken: Array = []) -> void:
 	run_seed = new_seed
@@ -203,3 +206,21 @@ func ring_hit(pos: Vector3) -> Dictionary:
 			if not rg.is_empty():
 				return rg
 	return {}
+
+# Crow's Charm: good pickups nearby drift toward the bird
+func magnet(pos: Vector3, delta: float, radius := 7.0, speed := 10.0) -> void:
+	var c := TowerShape.chunk_at(pos.y)
+	for k in [c - 1, c, c + 1]:
+		if not chunks.has(k):
+			continue
+		for pk in chunks[k].pickups:
+			if pk.taken >= 0.0 or pk.type == "poison":
+				continue
+			var p := Vector3(sin(pk.theta) * pk.r, pk.y, cos(pk.theta) * pk.r)
+			var to := pos + Vector3(0, 0.5, 0) - p
+			if to.length() > radius or to.length() < 0.05:
+				continue
+			p += to.normalized() * min(speed * delta, to.length())
+			pk.theta = atan2(p.x, p.z)
+			pk.r = Vector2(p.x, p.z).length()
+			pk.y = p.y

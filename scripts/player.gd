@@ -9,6 +9,7 @@ signal landed(fall_height: float)
 signal flapped
 signal jumped
 signal boosted
+signal powered(kind: String)
 signal flap_denied
 signal picked_up(kind: String)
 
@@ -50,6 +51,7 @@ var frames_fall: SpriteFrames = FALL_FRAMES
 var flap_anim := 0.0
 var gliding := false
 var wire: Dictionary = {}               # the tightrope we're riding, if any
+var powers := {}                       # active power-ups: name -> seconds left
 var wire_chunk: TowerChunk
 var sick := 0.0                      # poisoned: no stamina recovery for a moment
 
@@ -113,6 +115,7 @@ func _ready() -> void:
 
 func place(t: float, radius: float, height: float) -> void:
 	wire = {}
+	powers.clear()
 	theta = t
 	r = radius
 	y = height
@@ -176,7 +179,7 @@ func _physics_process(delta: float) -> void:
 		jump_buffer = Tuning.JUMP_BUFFER
 	if jump_buffer > 0.0:
 		if (grounded or coyote > 0.0) and stamina >= Tuning.JUMP_COST - 0.001:
-			vy = Tuning.JUMP_SPEED
+			vy = Tuning.JUMP_SPEED * _spring()
 			stamina -= Tuning.JUMP_COST
 			_leave_ground()
 			jumped.emit()
@@ -185,7 +188,7 @@ func _physics_process(delta: float) -> void:
 			jump_buffer = 0.0
 			squash = -0.6
 		elif not grounded and coyote <= 0.0 and stamina >= Tuning.FLAP_COST - 0.001:
-			vy = Tuning.FLAP_SPEED
+			vy = Tuning.FLAP_SPEED * _spring()
 			stamina -= Tuning.FLAP_COST
 			jump_buffer = 0.0
 			flap_anim = 0.35
@@ -198,7 +201,7 @@ func _physics_process(delta: float) -> void:
 
 	if grounded:
 		# Ride moving ledges, and step off edges (or fall with a crumbling one)
-		if ground.kind == ChunkPlanner.Kind.MOVER or ground.kind == ChunkPlanner.Kind.ORBIT:
+		if ground.kind in [ChunkPlanner.Kind.MOVER, ChunkPlanner.Kind.ORBIT, ChunkPlanner.Kind.PROP]:
 			theta += ground.offset - ground.get("_last_offset", ground.offset)
 		ground._last_offset = ground.offset
 		if not tower.supports(ground, theta, r):
@@ -221,7 +224,7 @@ func _physics_process(delta: float) -> void:
 		elif vy > 0.0 and jump_held:
 			g *= Tuning.RISE_GRAVITY_HELD
 		elif vy < 0.0:
-			g *= Tuning.FALL_GRAVITY
+			g *= Tuning.CLOUD_GRAVITY if powers.has("cloud") else Tuning.FALL_GRAVITY
 		vy = max(vy - g * delta, Tuning.TERMINAL_VY)
 		if gliding:
 			if vy < -Tuning.GLIDE_MAX_SINK:
@@ -256,6 +259,14 @@ func _physics_process(delta: float) -> void:
 func _collect(delta: float) -> void:
 	max_y = max(max_y, y)
 	sick = max(sick - delta, 0.0)
+	for p in powers.keys():
+		powers[p] -= delta
+		if powers[p] <= 0.0:
+			powers.erase(p)
+	if powers.has("sunseed"):
+		stamina = max_stamina             # endless, while it lasts
+	if powers.has("charm"):
+		tower.magnet(world_position(), delta)
 	for kind in ([] if is_npc else tower.collect_pickups(world_position())):
 		match kind:
 			"feather":   # bigger bucket for good, plus a flap's worth
@@ -266,6 +277,10 @@ func _collect(delta: float) -> void:
 			"poison":
 				stamina = max(stamina - Tuning.POISON_DRAIN, 0.0)
 				sick = Tuning.POISON_SICK
+			_:
+				if Tuning.POWER_TIME.has(kind):
+					powers[kind] = Tuning.POWER_TIME[kind]
+					powered.emit(kind)
 		picked_up.emit(kind)
 
 # Struck by lightning: stunned, blasted outward and up, and it stings
@@ -276,6 +291,9 @@ func zap() -> void:
 	_leave_ground()
 	stamina = max(stamina - 25.0, 0.0)
 	squash = 1.0
+
+func _spring() -> float:
+	return Tuning.SPRING_MULT if powers.has("spring") else 1.0
 
 # Bounced off something's head (another bird): a free hop up
 func bounce(speed: float) -> void:

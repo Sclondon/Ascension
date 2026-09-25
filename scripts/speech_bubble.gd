@@ -10,20 +10,31 @@ const LABEL_PX := 0.011              # metres per font pixel: letters ~0.45 m ta
 const MAX_WIDTH := 460.0             # wrap width, in font pixels (~5 m)
 const PAD := 0.28
 const TAIL := 6                      # tail height in texels
-const PAPER := Color(1.0, 0.97, 0.9)
+const PAPER := Color(1.0, 0.97, 0.9, 0.62)   # see-through, so it doesn't block the view
+const EDGE := Color(0.15, 0.08, 0.2, 0.8)
 const INK := Color(0.15, 0.08, 0.2)
 
 var label: Label3D
 var balloon: Sprite3D
 var openness := 0.0
+var hold := 0.0                      # seconds left on a timed line (say)
+
+# Show `text` for `seconds` (for crows that pipe up now and then)
+func say(text: String, seconds := 3.0) -> void:
+	setup(text)
+	hold = seconds
 
 func setup(text: String) -> void:
+	for c in get_children():
+		c.queue_free()
 	label = Label3D.new()
 	label.text = text
 	label.font_size = FONT_SIZE
 	label.pixel_size = LABEL_PX
 	label.modulate = INK
-	label.outline_size = 0
+	# A pale outline keeps the text readable on the see-through balloon
+	label.outline_size = 8
+	label.outline_modulate = Color(1.0, 0.97, 0.9, 0.9)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
@@ -51,10 +62,13 @@ func setup(text: String) -> void:
 
 	label.position = Vector3(0, (TAIL + box.y / TEXEL * 0.5) * TEXEL, 0.01)
 	add_child(label)
-	visible = false
-	scale = Vector3.ONE * 0.01
+	if openness <= 0.0:
+		visible = false
+		scale = Vector3.ONE * 0.01
 
 func tick(delta: float, want_open: bool) -> void:
+	hold = max(hold - delta, 0.0)
+	want_open = want_open or hold > 0.0
 	openness = move_toward(openness, 1.0 if want_open else 0.0, delta * 6.0)
 	visible = openness > 0.01
 	if not visible:
@@ -77,14 +91,14 @@ static func _balloon_texture(w: int, h: int) -> ImageTexture:
 			if cx + cy < 2:
 				continue
 			var edge := cx == 0 or cy == 0 or cx + cy == 2
-			img.set_pixel(x, y, INK if edge else PAPER)
+			img.set_pixel(x, y, EDGE if edge else PAPER)
 	# Tail: a narrowing wedge below the middle
 	var mid := w / 2
 	for t in TAIL:
 		var half := maxi(TAIL / 2 - t, 0)
 		for x in range(mid - half - 1, mid + half + 2):
 			var edge := x == mid - half - 1 or x == mid + half + 1
-			img.set_pixel(x, h + t, INK if edge or half == 0 else PAPER)
+			img.set_pixel(x, h + t, EDGE if edge or half == 0 else PAPER)
 		img.set_pixel(mid, h - 1, PAPER)
 		for x in range(mid - TAIL / 2, mid + TAIL / 2 + 1):
 			img.set_pixel(x, h - 1, PAPER)

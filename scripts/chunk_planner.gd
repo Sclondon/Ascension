@@ -7,7 +7,7 @@ class_name ChunkPlanner
 # jumps leads from this chunk's anchor to the next chunk's anchor, then extras
 # (optional ledges, traps, movers) are scattered around it.
 
-enum Kind { GROUND, LEDGE, BALCONY, PERCH, RING, CRUMBLE, MOVER, TURRET, ISLAND, FRAGILE, ORBIT, RETRACT, PROP }
+enum Kind { GROUND, LEDGE, BALCONY, PERCH, RING, CRUMBLE, MOVER, TURRET, ISLAND, FRAGILE, ORBIT, RETRACT, PROP, CATWALK }
 
 const ANCHOR_LIFT := 0.3
 const MIN_DY := 1.6
@@ -50,12 +50,10 @@ static func snap_to_face(k: int, a: float) -> float:
 static func spiral_angle(y: float) -> float:
 	return y * SPIRAL_RATE
 
-# Typical wind in a band (either side of its start). Path jumps are shortened
-# by it, since the wind might be blowing against you.
+# The worst wind a band's weather can bring (either side of its start).
+# Path jumps are shortened by it, since it might be blowing against you.
 static func headwind(band: int) -> float:
-	var w := Weather.weather_of(band)
-	var p := Weather.weather_of(max(band - 1, 0))
-	return max(w.wind, p.wind) * 1.2
+	return max(Weather.band_max_wind(band), Weather.band_max_wind(max(band - 1, 0))) * 1.2
 
 static func is_outer(s: Dictionary) -> bool:
 	return s.kind == Kind.TURRET or s.kind == Kind.ISLAND or s.kind == Kind.PROP
@@ -68,12 +66,12 @@ static func hangs_below(s: Dictionary) -> float:
 		Kind.ISLAND:
 			return 2.8
 		Kind.PROP:
-			return 1.8
+			return 1.8 + s.get("lift", 0.0)
 	return 1.2
 
 # How far a surface's structure rises above its top (roofed turrets)
 static func rises_above(s: Dictionary) -> float:
-	return 3.2 if s.get("roof", false) else 0.0
+	return (3.2 if s.get("roof", false) else 0.0) + s.get("lift", 0.0)
 
 # --- anchors ------------------------------------------------------------------
 
@@ -173,6 +171,15 @@ static func outer_surface(k: int, kind: int, top: float, center: float, dist: fl
 	if kind == Kind.ISLAND or kind == Kind.PROP:
 		s.base_top = top
 		s.bob_phase = rng.randf() * TAU
+	if kind == Kind.PROP:
+		# Some propeller decks swing round the tower, some rise and sink
+		var move := rng.randf()
+		if move < 0.2:
+			s.swing = rng.randf_range(0.4, 0.9)
+		elif move < 0.4:
+			s.lift = rng.randf_range(1.5, 3.0)
+		s.speed = rng.randf_range(0.3, 0.6)
+		s.phase = rng.randf() * TAU
 	if kind == Kind.TURRET:
 		s.roof = rng.randf() < 0.45       # some have a pitched roof on posts
 	return s
@@ -189,6 +196,22 @@ static func orbit_surface(k: int, top: float, center: float, rng: RandomNumberGe
 		"d0": r0 - TowerShape.apothem(k), "d1": r0 + 1.6 - TowerShape.apothem(k),
 		"polys": [TowerShape.arc_polygon(center - half, center + half, r0, r0 + 1.6)],
 		"rail_r": r0 + 0.8, "speed": speed, "phase": rng.randf() * TAU,
+	}
+
+# A long catwalk straight out from the wall to a lookout pad at the end
+static func catwalk_surface(k: int, top: float, center: float, length: float) -> Dictionary:
+	var base := TowerShape.ring_point(k, center, -0.05)
+	var out := Vector2(sin(center), cos(center))
+	var side := Vector2(cos(center), -sin(center))
+	var tip := base + out * length
+	var walk := PackedVector2Array([base - side * 0.55, base + side * 0.55, tip + side * 0.55, tip - side * 0.55])
+	var end := tip + out * 1.1
+	var pad := PackedVector2Array([end - side * 1.2 - out * 1.2, end + side * 1.2 - out * 1.2, end + side * 1.2 + out * 1.2, end - side * 1.2 + out * 1.2])
+	var half: float = max(0.15, 1.3 / end.length())
+	return {
+		"kind": Kind.CATWALK, "top": top, "band": TowerShape.band_of_chunk(k), "k": k,
+		"a0": center - half, "a1": center + half, "d0": 0.0, "d1": length + 2.3,
+		"polys": [walk, pad], "end_x": end.x, "end_z": end.y, "length": length,
 	}
 
 # A ledge that slides back into the wall every few seconds
@@ -358,6 +381,10 @@ static func plan(run_seed: int, k: int) -> Dictionary:
 		# something (or still can't be reached), make it a plain ledge instead
 		if is_outer(next):
 			var fits := gap_between(cur, next) <= reach
+			# ...and only if you could get back to a wall ledge from it afterwards
+			var back := Tuning.hop_length(0.0, max(0.0, next.d0 - ledge_depth(band)))
+			if back > reach_for(max_dy(band), band):
+				fits = false
 			for other in surfaces:
 				if fits and conflicts(other, next):
 					fits = false
@@ -428,12 +455,28 @@ static func plan(run_seed: int, k: int) -> Dictionary:
 			surfaces.append(s)
 			extras.append(s)
 
+	# Now and then a long catwalk reaching far out, with something at the end
+	var catwalk: Dictionary = {}
+	if k >= START_CHUNKS and rng.randf() < 0.3:
+		for attempt in 4:
+			var cw := catwalk_surface(k, rng.randf_range(base + 1.5, top_limit - 0.5), rng.randf() * TAU, rng.randf_range(7.0, 9.5))
+			var clear := true
+			for other in surfaces:
+				if conflicts(other, cw):
+					clear = false
+					break
+			if clear:
+				cw.path = false
+				surfaces.append(cw)
+				catwalk = cw
+				break
+
 	# Pickups. Gold feathers (bigger bucket, gone once taken) float above
 	# detours; seeds (a top-up, they grow back) sit over some route ledges;
 	# poison hovers just off the route, where a careless flight drifts into it.
 	var pickups: Array[Dictionary] = []
 	for s in extras:
-		if s.kind in [Kind.MOVER, Kind.CRUMBLE, Kind.FRAGILE, Kind.ORBIT, Kind.RETRACT] or rng.randf() > 0.55:
+		if s.kind in [Kind.MOVER, Kind.CRUMBLE, Kind.FRAGILE, Kind.ORBIT, Kind.RETRACT] or s.has("swing") or s.has("lift") or rng.randf() > 0.55:
 			continue
 		pickups.append(_pickup_over(k, "feather", pickups.size(), s, 1.3))
 	var path: Array[Dictionary] = []
@@ -469,6 +512,16 @@ static func plan(run_seed: int, k: int) -> Dictionary:
 					var t := j / 2.0
 					pickups.append({"id": "%d:p%d" % [k, pickups.size()], "type": "seed", "theta": a,
 						"r": TowerShape.wall_r(k, a, lerp(3.2, FAR_OUT.y, t)), "y": s.top + 1.0 + t * 1.6})
+
+	# Power-ups: at the end of a catwalk, or out in open air now and then
+	if not catwalk.is_empty():
+		var e := Vector2(catwalk.end_x, catwalk.end_z)
+		pickups.append({"id": "%d:p%d" % [k, pickups.size()], "type": _power(rng) if rng.randf() < 0.7 else "feather",
+			"theta": atan2(e.x, e.y), "r": e.length(), "y": catwalk.top + 1.2})
+	elif k >= START_CHUNKS and rng.randf() < 0.15:
+		var a := rng.randf() * TAU
+		pickups.append({"id": "%d:p%d" % [k, pickups.size()], "type": _power(rng), "theta": a,
+			"r": TowerShape.wall_r(k, a, rng.randf_range(FAR_OUT.x, FAR_OUT.y)), "y": rng.randf_range(base + 2.0, base + TowerShape.CHUNK_H - 2.0)})
 
 	for i in surfaces.size():
 		surfaces[i].id = "%d:%d" % [k, i]
@@ -523,7 +576,7 @@ static func _plan_wires(rng: RandomNumberGenerator, k: int, surfaces: Array[Dict
 	if k < START_CHUNKS:
 		return wires
 	for s in surfaces:
-		if not is_outer(s) or s.get("roof", false) or rng.randf() > 0.55:
+		if not is_outer(s) or s.get("roof", false) or s.has("swing") or s.has("lift") or rng.randf() > 0.55:
 			continue
 		var a := atan2(s.cx, s.cz) + rng.randf_range(-0.35, 0.35)
 		var hook := TowerShape.ring_point(k, a, 0.05)
@@ -587,6 +640,11 @@ static func _crowded(s: Dictionary, others: Array[Dictionary]) -> bool:
 		if o.kind != Kind.GROUND and o.kind != Kind.RING and conflicts(o, s):
 			return true
 	return false
+
+# Which power-up: endless stamina, super jumps, feather-light falls, or a
+# charm that pulls treasure to you
+static func _power(rng: RandomNumberGenerator) -> String:
+	return ["sunseed", "sunseed", "spring", "spring", "cloud", "charm"][rng.randi_range(0, 5)]
 
 static func _pickup_over(k: int, type: String, n: int, s: Dictionary, lift: float) -> Dictionary:
 	var a: float = (s.a0 + s.a1) * 0.5

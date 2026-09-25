@@ -1,8 +1,7 @@
 class_name BackgroundBirds
 extends Node3D
-# Flocks of black silhouettes crossing the far sky in thunderstorms. They're
-# spawned with each lightning strike, so the flash is what reveals them, and
-# the odd straggler flock passes between strikes.
+# Flocks of black silhouettes crossing the far sky. In thunderstorms they're
+# also spawned with lightning strikes, so the flash reveals them.
 
 const FLAP_FRAMES := preload("res://animations/player_jump_SF.tres")
 const LIFE := 9.0
@@ -46,11 +45,10 @@ func spawn(cam: Camera3D, focus_y: float) -> void:
 
 # Called every frame; `stormy` is whether this band has lightning
 func update(delta: float, cam: Camera3D, focus_y: float, stormy: bool) -> void:
-	if stormy:
-		idle_timer -= delta
-		if idle_timer <= 0.0:
-			idle_timer = randf_range(8.0, 16.0)
-			spawn(cam, focus_y)
+	idle_timer -= delta
+	if idle_timer <= 0.0:
+		idle_timer = randf_range(8.0, 16.0) if stormy else randf_range(14.0, 30.0)
+		spawn(cam, focus_y)
 	for i in range(flocks.size() - 1, -1, -1):
 		var f: Dictionary = flocks[i]
 		f.age += delta

@@ -16,6 +16,10 @@ const WOOD := Color(0.42, 0.28, 0.18)
 const ROOF := Color(0.32, 0.22, 0.3)
 
 const PICKUP_RESPAWN := 25.0         # seeds and poison grow back; gold feathers don't
+const POWER_RESPAWN := 45.0
+const POWERS := ["sunseed", "spring", "cloud", "charm"]
+const GLOWS := {"feather": Color(1.0, 0.82, 0.3), "sunseed": Color(1.0, 0.7, 0.2), "spring": Color(1.0, 0.4, 0.45),
+	"cloud": Color(0.75, 0.9, 1.0), "charm": Color(0.75, 0.45, 1.0)}
 static var _pickup_tex := {}
 
 var plan: Dictionary
@@ -26,6 +30,7 @@ var drafts: Array[Dictionary] = []
 var npcs: Array[Npc] = []
 var wires: Array[Dictionary] = []
 var rings: Array[Dictionary] = []
+var speakers: Array = []               # crows' speech bubbles (ticked here)
 var built := false
 
 # `collected` holds ids of gold feathers already taken this run (they don't return)
@@ -42,6 +47,7 @@ func setup(p: Dictionary, collected: Dictionary) -> void:
 			continue
 		var d: Dictionary = pk.duplicate()
 		d.taken = -1.0                   # seconds since taken, -1 while available
+		d.home = Vector3(d.theta, d.r, d.y)
 		d.node = null
 		pickups.append(d)
 	drafts = p.drafts
@@ -99,6 +105,12 @@ func tick(time: float, delta: float) -> void:
 					s.node.rotation.y = s.offset
 			Kind.ISLAND, Kind.PROP:
 				s.top = s.base_top + sin(time * 0.8 + s.bob_phase) * ISLAND_BOB
+				if s.has("lift"):
+					s.top += sin(time * s.speed + s.phase) * s.lift
+				if s.has("swing"):
+					s.offset = sin(time * s.speed + s.phase) * s.swing
+					if s.node:
+						s.node.rotation.y = s.offset
 				if s.node:
 					s.node.position.y = s.top - s.base_top
 					var blades: Node3D = s.node.get_node_or_null("Blades")
@@ -117,16 +129,22 @@ func tick(time: float, delta: float) -> void:
 					_tick_crumble(s, delta)
 	for w in wires:
 		_tick_wire(w, delta)
+	for sp in speakers:
+		if is_instance_valid(sp):
+			sp.tick(delta, false)
 	for rg in rings:
 		rg.cool = max(rg.cool - delta, 0.0)
 	for pk in pickups:
 		if pk.taken >= 0.0 and pk.type != "feather":
 			pk.taken += delta
-			if pk.taken > PICKUP_RESPAWN:
+			if pk.taken > (POWER_RESPAWN if pk.type in POWERS else PICKUP_RESPAWN):
 				pk.taken = -1.0
+				pk.theta = pk.home.x      # back where it grew (the charm may have moved it)
+				pk.r = pk.home.y
+				pk.y = pk.home.z
 		if pk.node:
 			pk.node.visible = pk.taken < 0.0
-			pk.node.position.y = pk.y + sin(time * 2.5 + pk.theta * 3.0) * 0.15
+			pk.node.position = Vector3(sin(pk.theta) * pk.r, pk.y + sin(time * 2.5 + pk.theta * 3.0) * 0.15, cos(pk.theta) * pk.r)
 
 func _tick_crumble(s: Dictionary, delta: float) -> void:
 	s.crumble += delta
@@ -317,6 +335,9 @@ func _build_surface(s: Dictionary, tint: Color) -> void:
 		return
 	if s.kind == Kind.ORBIT:
 		_build_orbit(holder, s, tint)
+		return
+	if s.kind == Kind.CATWALK:
+		_build_catwalk(holder, s)
 		return
 	var st := MeshUtil.begin()
 	var top: float = s.top
@@ -597,6 +618,54 @@ static func _texture_for(type: String) -> Texture2D:
 			"...os...",
 			"..ossso.",
 		], {"o": Color(0.2, 0.05, 0.25), "p": Color(0.62, 0.2, 0.78), "w": Color(0.85, 1.0, 0.6), "s": Color(0.75, 0.88, 0.6)})
+	elif type == "sunseed":
+		tex = MeshUtil.pixel_texture([
+			"....y....",
+			".y..y..y.",
+			"..yoooy..",
+			"..oSSSo..",
+			"yyoSWSoyy",
+			"..oSSSo..",
+			"..yoooy..",
+			".y..y..y.",
+			"....y....",
+		], {"y": Color(1.0, 0.9, 0.35), "o": Color(0.6, 0.3, 0.05), "S": Color(1.0, 0.6, 0.15), "W": Color(1, 1, 0.9)})
+	elif type == "spring":
+		tex = MeshUtil.pixel_texture([
+			"...gg....",
+			"..gg.....",
+			"...oo....",
+			"..orro...",
+			".orrwro..",
+			".orrrro..",
+			"..orro...",
+			"...oo....",
+			"..zzzz...",
+		], {"g": Color(0.35, 0.75, 0.3), "o": Color(0.35, 0.05, 0.1), "r": Color(0.9, 0.2, 0.3), "w": Color(1, 0.8, 0.8), "z": Color(0.75, 0.75, 0.8)})
+	elif type == "cloud":
+		tex = MeshUtil.pixel_texture([
+			".........",
+			"...ww....",
+			"..wwww.w.",
+			".wwwwwwww",
+			"wwwwwwwww",
+			"wwbwwwbww",
+			".bbbbbbb.",
+			".........",
+			".........",
+		], {"w": Color(1, 1, 1), "b": Color(0.7, 0.82, 1.0)})
+	elif type == "charm":
+		tex = MeshUtil.pixel_texture([
+			"...ggg...",
+			"..g...g..",
+			"...ggg...",
+			"...gpg...",
+			"..gpppg..",
+			".gppwppg.",
+			"..gpppg..",
+			"...gpg...",
+			"....g....",
+		], {"g": Color(0.95, 0.75, 0.28), "p": Color(0.6, 0.25, 0.85), "w": Color(1, 0.9, 1)})
 	else:
 		# A proper feather: a pale quill, a lit and a shaded vane, a notch
 		tex = MeshUtil.pixel_texture([
@@ -634,14 +703,16 @@ func _build_pickup(pk: Dictionary) -> void:
 	sp.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	sp.shaded = false
 	holder.add_child(sp)
-	if pk.type == "feather":
-		_add_feather_glow(holder)
+	if GLOWS.has(pk.type):
+		_add_feather_glow(holder, GLOWS[pk.type])
+	if pk.type in POWERS:
+		sp.pixel_size = 0.1
 	pk.node = holder
 
 # Gold feathers glow softly and twinkle, so they read as treasure from afar
-func _add_feather_glow(holder: Node3D) -> void:
+func _add_feather_glow(holder: Node3D, color: Color) -> void:
 	var glow := Sprite3D.new()
-	glow.texture = MeshUtil.blob_texture(16, Color(1.0, 0.82, 0.3))
+	glow.texture = MeshUtil.blob_texture(16, color)
 	glow.pixel_size = 0.14
 	glow.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	glow.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
@@ -697,7 +768,7 @@ static func _star_texture() -> Texture2D:
 
 # The meadow round the tower's foot. Built once by the generator, not per
 # chunk, so it's still down there after the first chunks unload.
-static func make_ground() -> MeshInstance3D:
+static func make_ground() -> Node3D:
 	var st := MeshUtil.begin()
 	var disk := PackedVector2Array()
 	for i in 16:
@@ -725,7 +796,56 @@ static func make_ground() -> MeshInstance3D:
 		var a := rng.randf() * TAU
 		var r := rng.randf_range(14.0, 20.0)
 		MeshUtil.box(st, Vector3(sin(a) * r, 0.2, cos(a) * r), Vector3(1, 0.7, 0.8) * rng.randf_range(0.6, 1.3), rng.randf() * TAU, Color(0.5, 0.5, 0.52))
-	return MeshUtil.commit(st, MeshUtil.flat_material(Color.WHITE))
+	# A broken ring of low standing stones round the tower's foot
+	for i in 9:
+		if i == 4:
+			continue      # one fallen out of the circle
+		var a := TAU * i / 9.0 + 0.2
+		var r := rng.randf_range(9.5, 11.0)
+		var h := rng.randf_range(0.9, 1.8)
+		MeshUtil.box(st, Vector3(sin(a) * r, h * 0.5, cos(a) * r), Vector3(0.7, h, 0.4), a + rng.randf_range(-0.2, 0.2), Color(0.45, 0.46, 0.5))
+	MeshUtil.box(st, Vector3(sin(1.6) * 10.3, 0.2, cos(1.6) * 10.3), Vector3(1.6, 0.4, 0.7), 1.1, Color(0.42, 0.43, 0.47))
+	# Gnarled dead trees among the hemlocks
+	for i in 9:
+		var a := rng.randf() * TAU
+		var r := rng.randf_range(24.0, 34.0)
+		var base := Vector3(sin(a) * r, 0.0, cos(a) * r)
+		var top := base + Vector3(rng.randf_range(-0.6, 0.6), rng.randf_range(4.0, 6.0), rng.randf_range(-0.6, 0.6))
+		var bark := Color(0.22, 0.2, 0.2)
+		MeshUtil.beam(st, base, top, 0.35, bark)
+		for j in 4:
+			var from := base.lerp(top, rng.randf_range(0.45, 0.95))
+			var dir := Vector3(rng.randf_range(-1, 1), rng.randf_range(0.2, 0.9), rng.randf_range(-1, 1)).normalized()
+			MeshUtil.beam(st, from, from + dir * rng.randf_range(1.2, 2.4), 0.14, bark)
+	# Wildflowers in clumps, a few of them blood red
+	for clump in 40:
+		var a := rng.randf() * TAU
+		var r := rng.randf_range(4.5, 30.0)
+		var centre := Vector3(sin(a) * r, 0.0, cos(a) * r)
+		var col: Color = [Color(0.8, 0.7, 0.95), Color(1.0, 0.97, 0.9), Color(1.0, 0.9, 0.5), Color(0.75, 0.1, 0.15)][rng.randi_range(0, 3)]
+		for f in 8:
+			var p := centre + Vector3(rng.randf_range(-1.2, 1.2), 0.0, rng.randf_range(-1.2, 1.2))
+			MeshUtil.box(st, p + Vector3(0, 0.12, 0), Vector3(0.04, 0.24, 0.04), 0.0, Color(0.25, 0.45, 0.2))
+			MeshUtil.box(st, p + Vector3(0, 0.27, 0), Vector3(0.14, 0.08, 0.14), rng.randf() * TAU, col)
+	var ground := Node3D.new()
+	ground.add_child(MeshUtil.commit(st, MeshUtil.flat_material(Color.WHITE)))
+	# Fairy rings of pale mushrooms that glow faintly (unshaded, so they show at night)
+	var glow := MeshUtil.begin()
+	for ring in 2:
+		var a := rng.randf() * TAU
+		var c := Vector3(sin(a), 0, cos(a)) * rng.randf_range(12.0, 20.0)
+		var rr := rng.randf_range(1.6, 2.4)
+		for i in 11:
+			var b := TAU * i / 11.0
+			var p := c + Vector3(sin(b), 0, cos(b)) * rr * rng.randf_range(0.9, 1.1)
+			var h := rng.randf_range(0.2, 0.45)
+			MeshUtil.box(glow, p + Vector3(0, h * 0.5, 0), Vector3(0.07, h, 0.07), 0.0, Color(0.85, 0.9, 0.85))
+			MeshUtil.cone(glow, p + Vector3(0, h, 0), rng.randf_range(0.14, 0.24), 0.14, 6, Color(0.55, 0.95, 0.85))
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.vertex_color_use_as_albedo = true
+	ground.add_child(MeshUtil.commit(glow, m))
+	return ground
 
 # --- retracting ledges ----------------------------------------------------------
 
@@ -781,27 +901,111 @@ func _tick_wire(w: Dictionary, delta: float) -> void:
 		for b in w.perched:
 			b.position = wire_point(w, b.get_meta("t"))
 	for i in range(w.flying.size() - 1, -1, -1):
-		var b: Node3D = w.flying[i]
+		var b: AnimatedSprite3D = w.flying[i]
 		var v: Vector3 = b.get_meta("v")
-		b.position += v * delta
-		b.set_meta("v", v + Vector3(0, 2.0, 0) * delta)
-		b.set_meta("life", b.get_meta("life") - delta)
-		if b.get_meta("life") <= 0.0:
-			b.queue_free()
-			w.flying.remove_at(i)
+		var age: float = b.get_meta("age") + delta
+		b.set_meta("age", age)
+		match b.get_meta("mood"):
+			"fall":
+				# Drops like a stone for a moment, then remembers it has wings
+				v.y -= 14.0 * delta
+				b.position += v * delta
+				b.set_meta("v", v)
+				if age > 0.7:
+					b.set_meta("mood", "fly")
+					b.sprite_frames = Npc.recoloured(Player.FLAP_FRAMES, b.get_meta("tint"))
+					b.offset = Vector2(0, 16)
+					b.play("default")
+					b.set_meta("v", Vector3(v.x, 6.0, v.z))
+			"land":
+				# A hop through the air to the nearest ledge, then settles there
+				var t: float = min(age / 1.3, 1.0)
+				var from: Vector3 = b.get_meta("from")
+				var to: Vector3 = b.get_meta("to")
+				b.position = from.lerp(to, t) + Vector3(0, sin(t * PI) * 1.5, 0)
+				b.flip_h = to.x < from.x
+				if t >= 1.0:
+					b.sprite_frames = Npc.recoloured(Npc.IDLE_FRAMES, b.get_meta("tint"))
+					b.offset = Vector2(0, 7)
+					b.play("default")
+					b.speed_scale = 0.8
+					w.flying.remove_at(i)
+			_:
+				b.position += v * delta
+				b.set_meta("v", v + Vector3(0, 2.0, 0) * delta)
+				if age > 3.2:
+					speakers.erase(b.get_node_or_null("Bubble"))
+					b.queue_free()
+					w.flying.remove_at(i)
 
-# The bird landed on (or bounced on) this wire: every crow on it takes off
+const WIRE_LINES := {
+	"stay": ["Hey, this is my wire.", "Do you mind?", "Wobbly...", "I'm not moving.", "Rude."],
+	"fly": ["Caw!", "Not again!", "Scram!", "Ugh, tourists."],
+	"fall": ["Waaah!", "Whoa-", "My perch!"],
+	"land": ["Fine. I'll sit over here.", "Some of us were napping.", "Tch."],
+}
+
+# The bird landed on this wire. Each crow on it reacts its own way: flies
+# off, drops (then catches itself), stays put and grumbles, or hops over
+# to the nearest ledge. Usually one of them says something about it.
 func scare_wire(w: Dictionary) -> void:
-	for b: AnimatedSprite3D in w.perched:
-		b.sprite_frames = Npc.recoloured(Player.FLAP_FRAMES, b.get_meta("tint"))
-		b.offset = Vector2(0, 16)
+	var spoke := false
+	for b: AnimatedSprite3D in w.perched.duplicate():
+		var roll := randf()
+		var mood := "fly" if roll < 0.4 else ("fall" if roll < 0.6 else ("stay" if roll < 0.85 else "land"))
+		if not spoke and randf() < 0.6:
+			spoke = true
+			_crow_says(b, WIRE_LINES[mood].pick_random())
+		if mood == "stay":
+			continue
+		w.perched.erase(b)
+		b.set_meta("mood", mood)
+		b.set_meta("age", 0.0)
+		var away := Vector3(b.position.x, 0, b.position.z).normalized()
+		if mood == "land":
+			var spot := _nearest_perch(b.position)
+			if spot == Vector3.INF:
+				mood = "fly"
+				b.set_meta("mood", mood)
+			else:
+				b.set_meta("from", b.position)
+				b.set_meta("to", spot)
+		if mood == "fall":
+			b.sprite_frames = Npc.recoloured(Player.FALL_FRAMES, b.get_meta("tint"))
+			b.set_meta("v", Vector3(0, -1.0, 0) + away * 0.5)
+		else:
+			b.sprite_frames = Npc.recoloured(Player.FLAP_FRAMES, b.get_meta("tint"))
+			b.set_meta("v", away * randf_range(2.0, 5.0) + Vector3(randf_range(-2, 2), randf_range(4.0, 7.0), randf_range(-2, 2)))
+		b.offset = Vector2(0, b.sprite_frames.get_frame_texture("default", 0).get_height() * 0.5)
 		b.play("default")
 		b.speed_scale = 3.0
-		var away := Vector3(b.position.x, 0, b.position.z).normalized()
-		b.set_meta("v", away * randf_range(2.0, 5.0) + Vector3(randf_range(-2, 2), randf_range(4.0, 7.0), randf_range(-2, 2)))
-		b.set_meta("life", 2.5)
 		w.flying.append(b)
-	w.perched.clear()
+
+# The top of the nearest standing ledge within reach of a crow, or INF
+func _nearest_perch(from: Vector3) -> Vector3:
+	var best := Vector3.INF
+	var best_d := 12.0
+	for s in surfaces:
+		if s.broken or s.kind in [Kind.GROUND, Kind.RING, Kind.MOVER, Kind.ORBIT, Kind.RETRACT, Kind.PROP, Kind.ISLAND]:
+			continue
+		var a: float = (s.a0 + s.a1) * 0.5
+		var r: float = Vector2(s.cx, s.cz).length() if ChunkPlanner.is_outer(s) else TowerShape.wall_r(s.k, a, s.d1 * 0.6)
+		var p := Vector3(sin(a) * r, s.top, cos(a) * r)
+		var d := p.distance_to(from)
+		if d < best_d and d > 2.0:
+			best_d = d
+			best = p
+	return best
+
+func _crow_says(b: Node3D, line: String) -> void:
+	var bubble: SpeechBubble = b.get_node_or_null("Bubble")
+	if bubble == null:
+		bubble = SpeechBubble.new()
+		bubble.name = "Bubble"
+		bubble.position = Vector3(0, 1.4, 0)
+		b.add_child(bubble)
+		speakers.append(bubble)
+	bubble.say(line, 2.6)
 
 func _draw_wire(w: Dictionary) -> void:
 	if w.line == null:
@@ -944,3 +1148,48 @@ func _build_orbit(holder: Node3D, s: Dictionary, tint: Color) -> void:
 		var a1 := TAU * (i + 1) / n
 		MeshUtil.beam(rail, Vector3(sin(a0) * rr, top - 0.5, cos(a0) * rr), Vector3(sin(a1) * rr, top - 0.5, cos(a1) * rr), 0.12, Color(0.55, 0.45, 0.3))
 	add_child(MeshUtil.commit(rail, MeshUtil.flat_material(Color.WHITE)))
+
+# A long plank catwalk straight out from the wall: railings along both
+# sides, struts underneath, cables from high on the wall to the far end, and
+# a lantern on the lookout pad
+func _build_catwalk(holder: Node3D, s: Dictionary) -> void:
+	var top: float = s.top
+	var st := MeshUtil.begin()
+	var walk: PackedVector2Array = s.polys[0]
+	var pad: PackedVector2Array = s.polys[1]
+	MeshUtil.extrude(st, walk, top - 0.16, top, Color(0.58, 0.42, 0.28), 1.0)
+	MeshUtil.extrude(st, pad, top - 0.25, top, Color(0.55, 0.4, 0.27), 1.0)
+	var base := (walk[0] + walk[1]) * 0.5
+	var end := Vector2(s.end_x, s.end_z)
+	var out := (end - base).normalized()
+	var side := Vector2(out.y, -out.x)
+	var length: float = s.length
+	# Railings
+	for sgn in [-1.0, 1.0]:
+		var n := int(length / 1.2)
+		for i in range(1, n + 1):
+			var p: Vector2 = base + out * (i * 1.2) + side * (0.5 * sgn)
+			MeshUtil.box(st, Vector3(p.x, top + 0.45, p.y), Vector3(0.08, 0.9, 0.08), 0.0, WOOD)
+		var a: Vector2 = base + out * 1.2 + side * (0.5 * sgn)
+		var b: Vector2 = base + out * length + side * (0.5 * sgn)
+		MeshUtil.beam(st, Vector3(a.x, top + 0.9, a.y), Vector3(b.x, top + 0.9, b.y), 0.07, WOOD)
+	# Struts from the wall below, and cables from the wall above to the far end
+	var mid: Vector2 = base + out * (length * 0.5)
+	MeshUtil.beam(st, Vector3(base.x, top - 2.6, base.y), Vector3(mid.x, top - 0.16, mid.y), 0.18, WOOD.darkened(0.2))
+	for sgn in [-1.0, 1.0]:
+		var hook: Vector2 = base + side * (0.5 * sgn)
+		var tip: Vector2 = end - out * 1.1 + side * (0.5 * sgn)
+		MeshUtil.beam(st, Vector3(hook.x, top + 3.6, hook.y), Vector3(tip.x, top + 0.95, tip.y), 0.04, Color(0.15, 0.14, 0.16))
+	# Lantern post at the end
+	var lp: Vector2 = end + out * 0.9
+	MeshUtil.beam(st, Vector3(lp.x, top, lp.y), Vector3(lp.x, top + 1.5, lp.y), 0.1, WOOD)
+	MeshUtil.box(st, Vector3(lp.x, top + 1.6, lp.y), Vector3(0.3, 0.35, 0.3), 0.0, Color(0.95, 0.65, 0.25))
+	holder.add_child(MeshUtil.commit(st, MeshUtil.flat_material(Color.WHITE)))
+	var lamp := Sprite3D.new()
+	lamp.texture = MeshUtil.blob_texture(16, Color(1.0, 0.7, 0.3))
+	lamp.pixel_size = 0.09
+	lamp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lamp.shaded = false
+	lamp.modulate.a = 0.6
+	lamp.position = Vector3(lp.x, top + 1.6, lp.y)
+	holder.add_child(lamp)

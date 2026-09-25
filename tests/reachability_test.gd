@@ -26,7 +26,8 @@ func _init() -> void:
 				steps += 1
 				# Must be possible, and leave at least a metre of height to spare
 				var too_high := dy > Tuning.max_jump_height(Tuning.PATH_FLAPS) - 1.0
-				if reach < 0.0 or gap > reach or too_high:
+				# (the planner keeps to 75% of reach; anything near 100% means a bug)
+				if reach < 0.0 or gap > reach * 0.8 or too_high:
 					failures += 1
 					if failures < 20:
 						print("UNREACHABLE seed=%d k=%d step=%d dy=%.2f gap=%.2f reach=%.2f" % [run_seed, k, i, dy, gap, reach])

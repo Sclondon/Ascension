@@ -139,6 +139,8 @@ func _build_view() -> void:
 	player.flap_denied.connect(func(): hud.deny())
 	player.picked_up.connect(func(kind): hud.pickup(kind))
 	player.boosted.connect(func(): hud.pickup("feather"))
+	player.powered.connect(func(kind): hud.show_banner(Hud.POWER_NAMES[kind]))
+	weather.changed.connect(func(line): if state == State.PLAYING: hud.show_banner(line))
 
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
@@ -237,6 +239,7 @@ func _load_world(new_seed: int, theta: float, r: float, y: float, max_y: float, 
 	last_band = TowerShape.band_at(y)
 
 func _new_climb() -> void:
+	weather.reset_clock()
 	_load_world(randi(), 0.0, TowerShape.apothem(0) + 1.5, 0.0, 0.0)
 	_play()
 
@@ -306,11 +309,13 @@ func _process(delta: float) -> void:
 	clouds.update(player.y, weather.cloud_tint, camera.global_position)
 	flocks.update(delta, camera, player.y, weather.current.lightning)
 	tower.tick_npcs(delta, player.world_position())
+	tower.meadow.update(delta, player.y, 1.0 - weather.dayness, camera.global_position)
 
 	if state != State.PLAYING:
 		return
 	hud.set_heights(player.y, max(best, player.max_y))
 	hud.set_stamina(player.stamina, player.max_stamina)
+	hud.set_powers(player.powers)
 	var band := TowerShape.band_at(player.y)
 	if band > last_band:
 		hud.show_banner(Weather.band_name(band))
@@ -410,7 +415,8 @@ func _take_shots() -> void:
 	var spots: Array = [["ground", 0.0]]
 	for b in range(1, 8):
 		spots.append(["band%d" % b, b * TowerShape.BAND_H + 0.5])
-	var wanted := [ChunkPlanner.Kind.PROP, ChunkPlanner.Kind.ORBIT, ChunkPlanner.Kind.RETRACT, ChunkPlanner.Kind.ISLAND]
+	spots.push_front(["meadow_night", 0.0])
+	var wanted := [ChunkPlanner.Kind.PROP, ChunkPlanner.Kind.ORBIT, ChunkPlanner.Kind.RETRACT, ChunkPlanner.Kind.CATWALK]
 	var roof_found := false
 	var wire_found := false
 	var rings_found := false
@@ -456,6 +462,8 @@ func _take_shots() -> void:
 		elif s.kind == ChunkPlanner.Kind.GROUND or s.kind == ChunkPlanner.Kind.RING:
 			a = 0.0
 			r = TowerShape.apothem(s.k) + 1.0
+		# Deep night for the meadow shot, early evening for the rest
+		weather.day_time = 0.75 if spots[i][0] == "meadow_night" else 0.3
 		var airborne: bool = spots[i][0] in ["airborne", "updraft", "wire", "rings"]
 		if spots[i][0] in ["updraft", "wire", "rings"]:
 			var d: Dictionary = spots[i][3]
