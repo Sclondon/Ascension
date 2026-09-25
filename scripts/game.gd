@@ -16,6 +16,7 @@ var best := 0.0
 var last_band := -1
 var autosave_timer := 0.0
 var shots_mode := false
+var record_mode := false             # attract-mode montage for the arcade preview video
 
 var tower: TowerGenerator
 var player: Player
@@ -37,12 +38,17 @@ var view: SubViewport
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_setup_input()
-	_load_best()
+	var args := OS.get_cmdline_user_args()
+	shots_mode = OS.is_debug_build() and args.has("--shots")
+	record_mode = OS.is_debug_build() and args.has("--record")
+	if not record_mode:
+		_load_best()
 	_build_view()
 	_build_ui()
-	shots_mode = OS.is_debug_build() and OS.get_cmdline_user_args().has("--shots")
 	if shots_mode:
 		_take_shots()
+	elif record_mode:
+		_record_attract()
 	else:
 		_enter_title()
 
@@ -101,7 +107,12 @@ func _build_view() -> void:
 	world.add_child(flocks)
 	tower = TowerGenerator.new()
 	world.add_child(tower)
-	player = Player.new()
+	# In record mode the rival-bird AI flies the player's own bird
+	if record_mode:
+		player = ClimberBird.new()
+	else:
+		player = Player.new()
+	player.is_npc = false
 	player.tower = tower
 	world.add_child(player)
 	rivals = Climbers.new()
@@ -345,7 +356,7 @@ func _clear_save() -> void:
 	_store("climb", SAVE_PATH, "{}")
 
 func _write_save() -> void:
-	if shots_mode:
+	if shots_mode or record_mode:
 		return
 	_update_best()
 	_store("climb", SAVE_PATH, JSON.stringify({
@@ -451,3 +462,59 @@ func _take_shots() -> void:
 		img.save_png(path)
 		print("saved ", path)
 	get_tree().quit()
+
+# Attract-mode montage for the arcade cabinet's preview video: a title card,
+# then the AI flying the bird through a few highlights. Record it with
+#   godot --path . --write-movie out.avi --fixed-fps 30 --resolution 720x1280 -- --record
+func _record_attract() -> void:
+	var fps := 30
+	var run := 4242
+	# Title card over the slowly orbiting tower (from the far side, away from
+	# the chatty frog)
+	_load_world(run, PI, TowerShape.apothem(0) + 1.5, 0.0, 0.0)
+	hud.visible = false
+	var box := title_panel.get_child(0).get_child(0)
+	for i in box.get_child_count():
+		box.get_child(i).visible = i < 2          # just the name and tagline
+	title_panel.visible = true
+	camera.orbit_idle = true
+	player.active = false
+	await _frames(int(1.8 * fps))
+
+	# Highlights: the start (and its frog), the first turret on the route,
+	# a thunderstorm, and the aurora
+	# (each clip is [seed, route surface to start from, seconds]; seed 99 has a
+	# turret on the route early on)
+	var clips: Array = [
+		[run, _route_spot(run, 0, -1), 3.4],
+		[99, _route_spot(99, 6, ChunkPlanner.Kind.TURRET, true), 3.4],
+		[run, _route_spot(run, 3 * TowerShape.CHUNKS_PER_BAND + 1, -1), 3.6],
+		[run, _route_spot(run, 6 * TowerShape.CHUNKS_PER_BAND + 2, -1), 3.2],
+	]
+	for clip in clips:
+		var s: Dictionary = clip[1]
+		var a: float = (s.a0 + s.a1) * 0.5 if s.kind != ChunkPlanner.Kind.GROUND else 0.0
+		var r: float = TowerShape.wall_r(s.band, a, min(1.0, s.d1 * 0.5)) if s.kind != ChunkPlanner.Kind.GROUND else TowerShape.apothem(0) + 1.5
+		_load_world(clip[0], a, r, s.top, s.top, Tuning.STAMINA_CAP)
+		_play()
+		if TowerShape.band_at(s.top) == 3:
+			# Make sure the storm shows off: lightning (and a flock) straight away
+			weather.lightning_timer = 0.6
+			flocks.spawn(camera, player.y)
+		await _frames(int(clip[2] * fps))
+	get_tree().quit()
+
+func _frames(n: int) -> void:
+	for i in n:
+		await get_tree().process_frame
+
+# The route surface to start a clip on: the one just before a surface of
+# `kind` in chunk k (when `before` is set), or else chunk k's first ledge
+func _route_spot(run: int, k: int, kind: int, before := false) -> Dictionary:
+	var path: Array = ChunkPlanner.plan(run, k).surfaces.filter(func(s): return s.path)
+	if kind < 0:
+		return path[min(1, path.size() - 1)] if k > 0 else path[0]
+	for i in range(1, path.size()):
+		if path[i].kind == kind:
+			return path[i - 1] if before else path[i]
+	return {}

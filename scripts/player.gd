@@ -81,6 +81,9 @@ func _ready() -> void:
 	ghost.render_priority = 4
 	add_child(ghost)
 	ghost.visible = not is_npc
+	# Keep the silhouette on exactly the same frame (it would otherwise lag a
+	# frame behind and show its wings beside the bird while flapping fast)
+	sprite.frame_changed.connect(func(): ghost.frame = sprite.frame)
 
 	feathers = _make_feathers()
 	add_child(feathers)
