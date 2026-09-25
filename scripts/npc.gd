@@ -1,12 +1,11 @@
 class_name Npc
 extends Node3D
-# A bird (or frog) on a ledge. Talkers say something strange in a speech
+# A crow on a ledge. Talkers say something strange in a speech
 # bubble when you come close; the quiet ones hop about their ledge instead.
 # Either way they turn to look at you.
 
 const IDLE_FRAMES := preload("res://animations/player_idle_SF.tres")
 const TALK_RANGE := 6.5
-const FROG_TEX := preload("res://images/frog.png")
 
 const FIRST_LINE := "Up. It's always up."
 const LINES := [
@@ -23,7 +22,7 @@ const LINES := [
 	"The wind speaks backwards up here.",
 	"When the air rises, open your wings and let it carry you.",
 	"The storm birds aren't birds.",
-	"I was a frog once. Then I climbed.",
+	"I was a pigeon once. Then I climbed.",
 	"Have you seen my shadow? It left a few floors down.",
 	"Seeds grow back. Feathers don't. Neither do crows.",
 	"If you fall, fall toward something.",
@@ -36,11 +35,12 @@ const LINES := [
 	"Hemlock is still up there. Somewhere. Waiting.",
 ]
 
-# Body colours for the recoloured crow sprite
+# Other crows: black, just tinted a little (grey, blue or brown) so they
+# don't look like you
 const TINTS := {
-	"dove": Color(0.92, 0.9, 0.86),
-	"owl": Color(0.62, 0.45, 0.3),
-	"jay": Color(0.35, 0.55, 0.9),
+	"crow_grey": Color(0.3, 0.3, 0.34),
+	"crow_blue": Color(0.22, 0.25, 0.34),
+	"crow_brown": Color(0.32, 0.27, 0.26),
 }
 
 static var _frames := {}
@@ -61,23 +61,18 @@ func setup(d: Dictionary, on: Dictionary) -> void:
 	line = FIRST_LINE if d.line < 0 else LINES[d.line % LINES.size()]
 	hop_timer = randf_range(1.0, 4.0)
 	name = "Npc_" + String(d.id).replace(":", "_")
-	if d.kind == "frog":
-		var s := Sprite3D.new()
-		s.texture = FROG_TEX
-		s.offset = Vector2(0, FROG_TEX.get_height() * 0.5)
-		sprite = s
-	else:
-		var s := AnimatedSprite3D.new()
-		s.sprite_frames = recoloured(IDLE_FRAMES, TINTS[d.kind])
-		s.offset = Vector2(0, 7)
-		s.play("default")
-		s.speed_scale = 0.8
-		sprite = s
+	var s := AnimatedSprite3D.new()
+	s.sprite_frames = recoloured(IDLE_FRAMES, TINTS.get(d.kind, TINTS.crow_grey))
+	s.offset = Vector2(0, 7)
+	s.play("default")
+	s.speed_scale = randf_range(0.6, 1.0)
+	sprite = s
 	var base := sprite as SpriteBase3D
 	base.pixel_size = 0.085
 	base.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	base.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
 	base.shaded = false
+	base.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
 	add_child(sprite)
 	if d.get("talks", false):
 		bubble = SpeechBubble.new()

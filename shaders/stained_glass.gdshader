@@ -2,7 +2,8 @@ shader_type spatial;
 render_mode cull_back, specular_disabled;
 
 // Procedural stained glass on a quad: leaded Voronoi panes inside a stone
-// frame. style 0 = pointed lancet window, 1 = rose window, 2 = wooden door.
+// frame. style 0 = pointed lancet window, 1 = rose window, 2 = wooden door,
+// 3 = warm lamplit window, 4 = dark barred window.
 
 uniform int style = 0;
 uniform vec2 size = vec2(1.0, 2.2);      // quad size in metres
@@ -109,6 +110,24 @@ void fragment() {
 			if (plank < 0.08) col = vec3(0.15, 0.08, 0.05);
 			if (abs(p.y - 0.7) < 0.06 || abs(p.y - size.y * 0.62) < 0.06) col = vec3(0.12, 0.12, 0.14);
 			if (length(p - vec2(hw * 0.45, 1.1)) < 0.07) col = vec3(0.8, 0.65, 0.3);
+		}
+	} else if (style == 3 || style == 4) {
+		// 3: a lamplit window, warm orange panes behind a simple lattice
+		// 4: a dark window with iron bars
+		float hs = size.y - hw * 1.732;
+		if (!in_arch(p, hw, hs, 0.0)) discard;
+		if (!in_arch(p, hw - FRAME, hs, FRAME)) {
+			col = stone;
+		} else if (style == 3) {
+			bool bar = abs(p.x) < 0.03 || abs(fract(p.y / 0.45) - 0.5) > 0.44;
+			// Brighter low down, like a lamp on the sill; a little flicker
+			float warmth = 0.75 + 0.25 * (1.0 - p.y / size.y) + 0.05 * sin(TIME * 7.0 + seed);
+			col = bar ? vec3(0.12, 0.07, 0.05) : vec3(1.0, 0.55, 0.2) * warmth;
+			emit = bar ? 0.0 : 0.9;
+		} else {
+			float bars = abs(fract(p.x / 0.18 + 0.5) - 0.5) * 0.18;
+			bool bar = bars < 0.022 || abs(p.y - size.y * 0.4) < 0.03;
+			col = bar ? vec3(0.28, 0.27, 0.3) : vec3(0.03, 0.02, 0.05);
 		}
 	} else {
 		float hs = size.y - hw * 1.732;

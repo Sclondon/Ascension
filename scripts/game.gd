@@ -138,6 +138,7 @@ func _build_view() -> void:
 			flocks.spawn(camera, player.y))
 	player.flap_denied.connect(func(): hud.deny())
 	player.picked_up.connect(func(kind): hud.pickup(kind))
+	player.boosted.connect(func(): hud.pickup("feather"))
 
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
@@ -409,12 +410,27 @@ func _take_shots() -> void:
 	var spots: Array = [["ground", 0.0]]
 	for b in range(1, 8):
 		spots.append(["band%d" % b, b * TowerShape.BAND_H + 0.5])
-	var wanted := [ChunkPlanner.Kind.TURRET, ChunkPlanner.Kind.ISLAND, ChunkPlanner.Kind.CRUMBLE, ChunkPlanner.Kind.FRAGILE]
-	for k in range(1, 40):
-		for s in ChunkPlanner.plan(run_seed, k).surfaces:
+	var wanted := [ChunkPlanner.Kind.PROP, ChunkPlanner.Kind.ORBIT, ChunkPlanner.Kind.RETRACT, ChunkPlanner.Kind.ISLAND]
+	var roof_found := false
+	var wire_found := false
+	var rings_found := false
+	for k in range(1, 60):
+		var pl := ChunkPlanner.plan(run_seed, k)
+		for s in pl.surfaces:
 			if s.kind in wanted:
 				wanted.erase(s.kind)
 				spots.append([ChunkPlanner.Kind.keys()[s.kind].to_lower(), s.top, s.id])
+			elif s.kind == ChunkPlanner.Kind.TURRET and s.get("roof", false) and not roof_found:
+				roof_found = true
+				spots.append(["roofed_turret", s.top, s.id])
+		if not wire_found and not pl.wires.is_empty() and pl.wires[0].birds > 0:
+			wire_found = true
+			var m: Vector3 = TowerChunk.wire_point(pl.wires[0], 0.35)
+			spots.append(["wire", m.y + 0.6, "", {"theta": atan2(m.x, m.z), "r": Vector2(m.x, m.z).length(), "up": true, "y0": m.y + 0.6}])
+		if not rings_found and not pl.rings.is_empty():
+			rings_found = true
+			var rg: Dictionary = pl.rings[0]
+			spots.append(["rings", rg.y - 0.8, "", {"theta": rg.theta - rg.dir * 2.5 / rg.r, "r": rg.r, "up": true, "y0": rg.y - 0.8}])
 	# An updraft column, seen from inside it
 	for k in range(2, 40):
 		var ups: Array = ChunkPlanner.plan(run_seed, k).drafts.filter(func(d): return d.up)
@@ -440,8 +456,8 @@ func _take_shots() -> void:
 		elif s.kind == ChunkPlanner.Kind.GROUND or s.kind == ChunkPlanner.Kind.RING:
 			a = 0.0
 			r = TowerShape.apothem(s.k) + 1.0
-		var airborne: bool = spots[i][0] == "airborne" or spots[i][0] == "updraft"
-		if spots[i][0] == "updraft":
+		var airborne: bool = spots[i][0] in ["airborne", "updraft", "wire", "rings"]
+		if spots[i][0] in ["updraft", "wire", "rings"]:
 			var d: Dictionary = spots[i][3]
 			player.place(d.theta, d.r, y)
 		else:
@@ -484,7 +500,7 @@ func _record_attract() -> void:
 	var fps := 30
 	var run := 4242
 	# Title card over the slowly orbiting tower (from the far side, away from
-	# the chatty frog)
+	# the chatty crow at the door)
 	_load_world(run, PI, TowerShape.apothem(0) + 1.5, 0.0, 0.0)
 	hud.visible = false
 	var box := title_panel.get_child(0).get_child(0)
@@ -495,7 +511,7 @@ func _record_attract() -> void:
 	player.active = false
 	await _frames(int(1.8 * fps))
 
-	# Highlights: the start (and its frog), the first turret on the route,
+	# Highlights: the start (and its crow), the first turret on the route,
 	# a thunderstorm, and the aurora
 	# (each clip is [seed, route surface to start from, seconds]; seed 99 has a
 	# turret on the route early on)

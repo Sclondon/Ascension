@@ -8,6 +8,7 @@ extends Node3D
 signal landed(fall_height: float)
 signal flapped
 signal jumped
+signal boosted
 signal flap_denied
 signal picked_up(kind: String)
 
@@ -48,6 +49,8 @@ var frames_flap: SpriteFrames = FLAP_FRAMES
 var frames_fall: SpriteFrames = FALL_FRAMES
 var flap_anim := 0.0
 var gliding := false
+var wire: Dictionary = {}               # the tightrope we're riding, if any
+var wire_chunk: TowerChunk
 var sick := 0.0                      # poisoned: no stamina recovery for a moment
 
 var sprite: AnimatedSprite3D
@@ -68,7 +71,9 @@ func _ready() -> void:
 	sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	sprite.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
 	sprite.shaded = false
-	sprite.render_priority = 10
+	# Normal depth sorting (a high priority here drew the bird over pickups and
+	# ledges it was actually behind); the silhouette just goes first
+	sprite.render_priority = 1
 	add_child(sprite)
 	sprite.play("default")
 
@@ -82,7 +87,7 @@ func _ready() -> void:
 	ghost.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
 	ghost.shaded = false
 	ghost.no_depth_test = true
-	ghost.render_priority = 4
+	ghost.render_priority = 0
 	add_child(ghost)
 	ghost.visible = false
 	ghost.modulate.a = 0.0
@@ -102,11 +107,12 @@ func _ready() -> void:
 	shadow.axis = Vector3.AXIS_Y     # lies flat on the ledge
 	shadow.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	shadow.shaded = false
-	shadow.render_priority = 5
+	shadow.render_priority = 0
 	shadow.top_level = true
 	add_child(shadow)
 
 func place(t: float, radius: float, height: float) -> void:
+	wire = {}
 	theta = t
 	r = radius
 	y = height
@@ -157,6 +163,14 @@ func _physics_process(delta: float) -> void:
 	var r_max := TowerShape.wall_r(shape, theta, Tuning.OUTER_REACH)
 	r = clamp(r, r_min, max(r_max, r_min))
 
+	# On a tightrope: slide along it, bounce with it, launch off it
+	if not wire.is_empty():
+		_ride_wire(delta, jump_pressed or jump_buffer > 0.0)
+		# (this frame ends here, even after a launch, so the same press
+		# doesn't also count as a flap)
+		_collect(delta)
+		return
+
 	# Jumping: the ground jump costs a little stamina, each air flap more
 	if jump_pressed:
 		jump_buffer = Tuning.JUMP_BUFFER
@@ -184,7 +198,7 @@ func _physics_process(delta: float) -> void:
 
 	if grounded:
 		# Ride moving ledges, and step off edges (or fall with a crumbling one)
-		if ground.kind == ChunkPlanner.Kind.MOVER:
+		if ground.kind == ChunkPlanner.Kind.MOVER or ground.kind == ChunkPlanner.Kind.ORBIT:
 			theta += ground.offset - ground.get("_last_offset", ground.offset)
 		ground._last_offset = ground.offset
 		if not tower.supports(ground, theta, r):
@@ -222,14 +236,24 @@ func _physics_process(delta: float) -> void:
 				vy = min(vy, Tuning.DRAFT_MAX_RISE)
 				fall_from = y
 		var prev_y := y
+		var prev_pos := world_position()
 		y += vy * delta
+		if not is_npc:
+			var rg := tower.ring_hit(world_position())
+			if not rg.is_empty():
+				_boost(rg)
 		if vy <= 0.0:
 			var s := tower.find_landing(prev_y, y, theta, r)
 			if not s.is_empty():
 				_land(s, true)
+			elif not is_npc and _try_wire(prev_pos):
+				pass
 			elif y <= 0.0:
 				_land(tower.chunk(0).surfaces[0], true)   # the ground
 
+	_collect(delta)
+
+func _collect(delta: float) -> void:
 	max_y = max(max_y, y)
 	sick = max(sick - delta, 0.0)
 	for kind in ([] if is_npc else tower.collect_pickups(world_position())):
@@ -270,6 +294,7 @@ func read_input() -> Dictionary:
 	}
 
 func _leave_ground() -> void:
+	wire = {}
 	if not ground.is_empty():
 		tower.leave(ground)
 	grounded = false
@@ -421,19 +446,24 @@ static func _particle_quad(tex: Texture2D, size: float) -> QuadMesh:
 
 # Little black feathers that tumble off and drift down while it flaps
 func _make_feathers() -> CPUParticles3D:
+	# A proper little feather, with a lighter quill so it shows on dark walls
 	var tex := MeshUtil.pixel_texture([
-		"...o",
-		"..oo",
-		".oo.",
-		".oo.",
-		"oo..",
-		"o...",
-	], {"o": Color(0.08, 0.06, 0.12)})
+		"....o",
+		"...oo",
+		"..ooq",
+		"..oqo",
+		".ooqo",
+		".oqoo",
+		"ooqo.",
+		"oqoo.",
+		"oqo..",
+		"qo...",
+	], {"o": Color(0.1, 0.07, 0.16), "q": Color(0.45, 0.4, 0.55)})
 	var p := CPUParticles3D.new()
 	p.local_coords = false
 	p.emitting = false
-	p.amount = Tuning.particles(8)
-	p.lifetime = 1.8
+	p.amount = Tuning.particles(12)
+	p.lifetime = 2.2
 	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
 	p.emission_sphere_radius = 0.35
 	p.direction = Vector3.UP
@@ -448,7 +478,7 @@ func _make_feathers() -> CPUParticles3D:
 	p.angular_velocity_min = -200.0
 	p.angular_velocity_max = 200.0
 	p.color_ramp = _fade_ramp(1.0)
-	p.mesh = _particle_quad(tex, 0.28)
+	p.mesh = _particle_quad(tex, 0.5)
 	return p
 
 # A small puff of dust at the feet when leaving the ground
@@ -480,3 +510,66 @@ func _puff() -> void:
 	p.global_position = global_position + Vector3(0, 0.1, 0)
 	p.emitting = true
 	p.finished.connect(p.queue_free)
+
+# --- tightropes and rings ---------------------------------------------------------
+
+# Falling onto a wire: grab it, push it down, scare off any crows sitting on it
+func _try_wire(prev_pos: Vector3) -> bool:
+	var hit := tower.wire_crossed(prev_pos, world_position())
+	if hit.is_empty():
+		return false
+	wire = hit.wire
+	wire_chunk = hit.chunk
+	wire.tb = hit.t
+	wire.dip_v += abs(vy) * 0.45
+	wire_chunk.scare_wire(wire)
+	grounded = true
+	ground = {}
+	vy = 0.0
+	gliding = false
+	fall_from = y
+	squash = 0.6
+	return true
+
+func _ride_wire(delta: float, jump: bool) -> void:
+	# Keep the bird on the wire as it moves along it
+	var a2 := Vector2(wire.a.x, wire.a.z)
+	var b2 := Vector2(wire.b.x, wire.b.z)
+	var here := Vector2(sin(theta) * r, cos(theta) * r)
+	var q := Geometry2D.get_closest_point_to_segment(here, a2, b2)
+	var t: float = a2.distance_to(q) / max(a2.distance_to(b2), 0.01)
+	if t <= 0.01 or t >= 0.99:
+		_leave_wire()         # walked off an end
+		return
+	wire.tb = t
+	var p := TowerChunk.wire_point(wire, t)
+	theta = atan2(p.x, p.z)
+	r = Vector2(p.x, p.z).length()
+	y = p.y
+	stamina = min(stamina + regen_rate * delta, max_stamina)
+	if jump:
+		# Launch: always free, and much higher if timed at the bottom of a bounce
+		vy = Tuning.JUMP_SPEED + Tuning.WIRE_LAUNCH + max(wire.dip, 0.0) * Tuning.WIRE_DIP_BOOST
+		wire.dip_v -= 4.0
+		jump_buffer = 0.0
+		flap_anim = 0.3
+		squash = -0.8
+		_leave_wire()
+		jumped.emit()
+
+func _leave_wire() -> void:
+	wire = {}
+	wire_chunk = null
+	grounded = false
+	fall_from = y
+
+# Flying through a boost ring: a lift, a shove the way you're going, a sip of
+# stamina
+func _boost(rg: Dictionary) -> void:
+	vy = max(vy, Tuning.RING_LIFT)
+	var dir: float = sign(vt) if abs(vt) > 0.5 else rg.dir
+	knock.x += dir * Tuning.RING_PUSH
+	stamina = min(stamina + Tuning.RING_STAMINA, max_stamina)
+	flap_anim = 0.3
+	fall_from = y
+	boosted.emit()

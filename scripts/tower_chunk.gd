@@ -24,6 +24,8 @@ var pickups: Array[Dictionary] = []
 var glass: Array[ShaderMaterial] = []
 var drafts: Array[Dictionary] = []
 var npcs: Array[Npc] = []
+var wires: Array[Dictionary] = []
+var rings: Array[Dictionary] = []
 var built := false
 
 # `collected` holds ids of gold feathers already taken this run (they don't return)
@@ -43,6 +45,20 @@ func setup(p: Dictionary, collected: Dictionary) -> void:
 		d.node = null
 		pickups.append(d)
 	drafts = p.drafts
+	for w in p.wires:
+		var d: Dictionary = w.duplicate()
+		d.dip = 0.0                      # how far the wire is pushed down (bounce)
+		d.dip_v = 0.0
+		d.tb = 0.5                       # where along it the push is
+		d.line = null
+		d.perched = []                   # crows sitting on it
+		d.flying = []                    # crows that took off
+		wires.append(d)
+	for rg in p.rings:
+		var d: Dictionary = rg.duplicate()
+		d.cool = 0.0
+		d.node = null
+		rings.append(d)
 	name = "Chunk%d" % p.k
 
 # --- collision queries -------------------------------------------------------
@@ -81,14 +97,28 @@ func tick(time: float, delta: float) -> void:
 				s.offset = sin(time * s.speed + s.phase) * s.swing
 				if s.node:
 					s.node.rotation.y = s.offset
-			Kind.ISLAND:
+			Kind.ISLAND, Kind.PROP:
 				s.top = s.base_top + sin(time * 0.8 + s.bob_phase) * ISLAND_BOB
 				if s.node:
 					s.node.position.y = s.top - s.base_top
+					var blades: Node3D = s.node.get_node_or_null("Blades")
+					if blades:
+						blades.rotation.y += delta * 24.0
+			Kind.ORBIT:
+				# All the way round, forever
+				s.offset = s.phase + time * s.speed
+				if s.node:
+					s.node.rotation.y = s.offset
+			Kind.RETRACT:
+				_tick_retract(s, time)
 			_:
 				# Crumbling ledges, and anything lightning has smashed
 				if s.crumble >= 0.0:
 					_tick_crumble(s, delta)
+	for w in wires:
+		_tick_wire(w, delta)
+	for rg in rings:
+		rg.cool = max(rg.cool - delta, 0.0)
 	for pk in pickups:
 		if pk.taken >= 0.0 and pk.type != "feather":
 			pk.taken += delta
@@ -135,7 +165,7 @@ func touch(s: Dictionary) -> void:
 
 # Hit by lightning: shatters straight away (and grows back like the others)
 func smash(s: Dictionary) -> void:
-	if s.kind in [Kind.GROUND, Kind.RING, Kind.MOVER, Kind.ISLAND] or s.crumble >= 0.0:
+	if s.kind in [Kind.GROUND, Kind.RING, Kind.MOVER, Kind.ISLAND, Kind.ORBIT, Kind.PROP, Kind.RETRACT] or s.crumble >= 0.0:
 		return
 	s.crumble = 0.0
 	s.delay = 0.02
@@ -215,6 +245,10 @@ func build() -> void:
 		_build_draft(d)
 	for n in plan.npcs:
 		_build_npc(n)
+	for w in wires:
+		_build_wire(w)
+	for rg in rings:
+		_build_ring(rg)
 
 func _build_walls(shape: int, base: float, tint: Color) -> void:
 	var st := MeshUtil.begin()
@@ -278,6 +312,12 @@ func _build_surface(s: Dictionary, tint: Color) -> void:
 	if s.kind == Kind.ISLAND:
 		_build_island(holder, s)
 		return
+	if s.kind == Kind.PROP:
+		_build_prop(holder, s)
+		return
+	if s.kind == Kind.ORBIT:
+		_build_orbit(holder, s, tint)
+		return
 	var st := MeshUtil.begin()
 	var top: float = s.top
 	var mat := MeshUtil.stone_material(tint.lerp(Color(1.0, 0.93, 0.8), 0.5), "slab")
@@ -336,6 +376,12 @@ func _build_surface(s: Dictionary, tint: Color) -> void:
 			mat = MeshUtil.stone_material(Color(0.75, 0.62, 1.0), "glow")
 			for poly in s.polys:
 				MeshUtil.extrude(st, poly, top - 0.35, top, Color.WHITE)
+		Kind.RETRACT:
+			# Iron-bound slab that slides in and out of a slot in the wall
+			for poly in s.polys:
+				MeshUtil.extrude(st, poly, top - 0.3, top, Color(0.72, 0.7, 0.78))
+			var edge := TowerShape.strip_polygon(shape, s.a0, s.a1, s.d1 - 0.18, s.d1)
+			MeshUtil.extrude(st, edge, top - 0.34, top + 0.04, Color(0.35, 0.33, 0.4))
 	holder.add_child(MeshUtil.commit(st, mat))
 
 # A little room hung off the tower on beams, crenellated on top (a bartizan)
@@ -369,6 +415,13 @@ func _build_turret(holder: Node3D, s: Dictionary, tint: Color) -> void:
 
 	var wood := MeshUtil.begin()
 	MeshUtil.cone(wood, Vector3(c.x, top - 2.9, c.y), R * 0.95, -1.4, 8, ROOF)
+	if s.get("roof", false):
+		# Roofed variant: four corner posts holding up a pitched roof
+		for i in range(0, poly.size(), 2):
+			var p := c + (poly[i] - c) * 0.88
+			MeshUtil.beam(wood, Vector3(p.x, top, p.y), Vector3(p.x, top + 2.4, p.y), 0.16, WOOD)
+		MeshUtil.cone(wood, Vector3(c.x, top + 2.35, c.y), R * 1.15, 1.5, 8, ROOF)
+		MeshUtil.beam(wood, Vector3(c.x, top + 3.8, c.y), Vector3(c.x, top + 4.3, c.y), 0.08, Color(0.8, 0.65, 0.3))
 	# Beam straight out from the wall, and a diagonal strut below it
 	var a: float = atan2(c.x, c.y)
 	var w := TowerShape.ring_point(shape, a, -0.1)
@@ -545,33 +598,102 @@ static func _texture_for(type: String) -> Texture2D:
 			"..ossso.",
 		], {"o": Color(0.2, 0.05, 0.25), "p": Color(0.62, 0.2, 0.78), "w": Color(0.85, 1.0, 0.6), "s": Color(0.75, 0.88, 0.6)})
 	else:
+		# A proper feather: a pale quill, a lit and a shaded vane, a notch
 		tex = MeshUtil.pixel_texture([
-			".....oo.",
-			"....oyyo",
-			"...oyyyo",
-			"...oyywo",
-			"..oyyywo",
-			"..oyywo.",
-			".oyyywo.",
-			".oyywo..",
-			"oyyyo...",
-			"oyyo....",
-			".oo.....",
-			"o.......",
-		], {"o": Color(0.45, 0.25, 0.05), "y": Color(1.0, 0.8, 0.25), "w": Color(1.0, 0.97, 0.8)})
+			".....o...",
+			"....oho..",
+			"...ohwyo.",
+			"...ohwyo.",
+			"..ohhwyyo",
+			"..ohhwyyo",
+			".ohhhwyyo",
+			".ohhhwyyo",
+			".ohh.wyyo",
+			"..ohhwyyo",
+			"..ohhwyo.",
+			"..ohhwyo.",
+			"...ohwo..",
+			"...ohwo..",
+			"....ow...",
+			".....w...",
+			".....w...",
+			".....o...",
+		], {"o": Color(0.5, 0.28, 0.05), "h": Color(1.0, 0.88, 0.4), "y": Color(0.95, 0.66, 0.15), "w": Color(1.0, 0.98, 0.85)})
 	_pickup_tex[type] = tex
 	return tex
 
 func _build_pickup(pk: Dictionary) -> void:
+	var holder := Node3D.new()
+	holder.position = Vector3(sin(pk.theta) * pk.r, pk.y, cos(pk.theta) * pk.r)
+	add_child(holder)
 	var sp := Sprite3D.new()
 	sp.texture = _texture_for(pk.type)
-	sp.pixel_size = 0.07 if pk.type == "feather" else 0.09
+	sp.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD    # solid, so depth decides who's in front
+	sp.pixel_size = 0.075 if pk.type == "feather" else 0.09
 	sp.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
 	sp.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	sp.shaded = false
-	sp.position = Vector3(sin(pk.theta) * pk.r, pk.y, cos(pk.theta) * pk.r)
-	add_child(sp)
-	pk.node = sp
+	holder.add_child(sp)
+	if pk.type == "feather":
+		_add_feather_glow(holder)
+	pk.node = holder
+
+# Gold feathers glow softly and twinkle, so they read as treasure from afar
+func _add_feather_glow(holder: Node3D) -> void:
+	var glow := Sprite3D.new()
+	glow.texture = MeshUtil.blob_texture(16, Color(1.0, 0.82, 0.3))
+	glow.pixel_size = 0.14
+	glow.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	glow.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	glow.shaded = false
+	glow.modulate = Color(1, 1, 1, 0.55)
+	glow.position = Vector3(0, 0, -0.05)
+	holder.add_child(glow)
+	var pulse := glow.create_tween().set_loops()
+	pulse.tween_property(glow, "modulate:a", 0.25, 0.7).set_trans(Tween.TRANS_SINE)
+	pulse.tween_property(glow, "modulate:a", 0.6, 0.7).set_trans(Tween.TRANS_SINE)
+	var sparkle := CPUParticles3D.new()
+	sparkle.amount = Tuning.particles(7)
+	sparkle.lifetime = 1.1
+	sparkle.local_coords = true
+	sparkle.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	sparkle.emission_sphere_radius = 0.7
+	sparkle.direction = Vector3.UP
+	sparkle.spread = 30.0
+	sparkle.initial_velocity_min = 0.1
+	sparkle.initial_velocity_max = 0.4
+	sparkle.gravity = Vector3.ZERO
+	var twinkle := Curve.new()
+	twinkle.add_point(Vector2(0, 0))
+	twinkle.add_point(Vector2(0.5, 1))
+	twinkle.add_point(Vector2(1, 0))
+	sparkle.scale_amount_curve = twinkle
+	var star := QuadMesh.new()
+	star.size = Vector2(0.22, 0.22)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	m.albedo_texture = _star_texture()
+	star.material = m
+	sparkle.mesh = star
+	holder.add_child(sparkle)
+
+static var _star: Texture2D
+
+static func _star_texture() -> Texture2D:
+	if _star == null:
+		_star = MeshUtil.pixel_texture([
+			"...w...",
+			"...w...",
+			"..wyw..",
+			"wwyyyww",
+			"..wyw..",
+			"...w...",
+			"...w...",
+		], {"w": Color(1.0, 0.95, 0.7), "y": Color(1, 1, 1)})
+	return _star
 
 # The meadow round the tower's foot. Built once by the generator, not per
 # chunk, so it's still down there after the first chunks unload.
@@ -591,7 +713,7 @@ static func make_ground() -> MeshInstance3D:
 	# Hemlocks: kept outside the camera's orbit so they never block the view
 	for i in 110:
 		var a := rng.randf() * TAU
-		var r := 27.0 + pow(rng.randf(), 1.6) * 190.0
+		var r := 36.0 + pow(rng.randf(), 1.6) * 190.0   # clear of the camera, even with the bird far out
 		var base := Vector3(sin(a) * r, 0.0, cos(a) * r)
 		var h := rng.randf_range(5.0, 11.0)
 		var col := Color(0.12, 0.3, 0.22).lightened(rng.randf_range(0.0, 0.15))
@@ -604,3 +726,221 @@ static func make_ground() -> MeshInstance3D:
 		var r := rng.randf_range(14.0, 20.0)
 		MeshUtil.box(st, Vector3(sin(a) * r, 0.2, cos(a) * r), Vector3(1, 0.7, 0.8) * rng.randf_range(0.6, 1.3), rng.randf() * TAU, Color(0.5, 0.5, 0.52))
 	return MeshUtil.commit(st, MeshUtil.flat_material(Color.WHITE))
+
+# --- retracting ledges ----------------------------------------------------------
+
+# Out for most of the cycle, a rattle of warning, then it slides into the
+# wall for a moment and comes back out
+func _tick_retract(s: Dictionary, time: float) -> void:
+	var period: float = s.period
+	var t := fposmod(time + s.phase, period)
+	var out_until := period * 0.62
+	var ext := 1.0
+	var rattle := 0.0
+	if t < out_until - 0.5:
+		ext = 1.0
+	elif t < out_until:
+		rattle = 0.05
+	elif t < out_until + 0.3:
+		ext = 1.0 - (t - out_until) / 0.3
+	elif t < period - 0.3:
+		ext = 0.0
+	else:
+		ext = (t - (period - 0.3)) / 0.3
+	s.broken = ext < 0.7
+	if s.node:
+		var c: float = (s.a0 + s.a1) * 0.5
+		var out := Vector3(sin(c), 0, cos(c))
+		s.node.position = -out * s.d1 * (1.0 - ext) + Vector3(randf_range(-rattle, rattle), 0, randf_range(-rattle, rattle))
+
+# --- wires --------------------------------------------------------------------
+
+const WIRE_SPRING := 70.0
+const WIRE_DAMP := 5.0
+
+# Height of wire `w` at t (0 = wall hook, 1 = post), including its sag and
+# any bounce pushing it down around tb
+static func wire_point(w: Dictionary, t: float) -> Vector3:
+	var a: Vector3 = w.a
+	var b: Vector3 = w.b
+	var p := a.lerp(b, t)
+	var tb: float = clamp(w.get("tb", 0.5), 0.05, 0.95)
+	var shape := t / tb if t < tb else (1.0 - t) / (1.0 - tb)
+	p.y -= w.sag * 4.0 * t * (1.0 - t) + w.get("dip", 0.0) * shape
+	return p
+
+func _tick_wire(w: Dictionary, delta: float) -> void:
+	var was: float = w.dip
+	w.dip_v += (-WIRE_SPRING * w.dip - WIRE_DAMP * w.dip_v) * delta
+	w.dip += w.dip_v * delta
+	if abs(w.dip) < 0.002 and abs(w.dip_v) < 0.01:
+		w.dip = 0.0
+		w.dip_v = 0.0
+	if w.dip != was or w.line == null:
+		_draw_wire(w)
+		for b in w.perched:
+			b.position = wire_point(w, b.get_meta("t"))
+	for i in range(w.flying.size() - 1, -1, -1):
+		var b: Node3D = w.flying[i]
+		var v: Vector3 = b.get_meta("v")
+		b.position += v * delta
+		b.set_meta("v", v + Vector3(0, 2.0, 0) * delta)
+		b.set_meta("life", b.get_meta("life") - delta)
+		if b.get_meta("life") <= 0.0:
+			b.queue_free()
+			w.flying.remove_at(i)
+
+# The bird landed on (or bounced on) this wire: every crow on it takes off
+func scare_wire(w: Dictionary) -> void:
+	for b: AnimatedSprite3D in w.perched:
+		b.sprite_frames = Npc.recoloured(Player.FLAP_FRAMES, b.get_meta("tint"))
+		b.offset = Vector2(0, 16)
+		b.play("default")
+		b.speed_scale = 3.0
+		var away := Vector3(b.position.x, 0, b.position.z).normalized()
+		b.set_meta("v", away * randf_range(2.0, 5.0) + Vector3(randf_range(-2, 2), randf_range(4.0, 7.0), randf_range(-2, 2)))
+		b.set_meta("life", 2.5)
+		w.flying.append(b)
+	w.perched.clear()
+
+func _draw_wire(w: Dictionary) -> void:
+	if w.line == null:
+		var mi := MeshInstance3D.new()
+		mi.mesh = ImmediateMesh.new()
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.albedo_color = Color(0.1, 0.08, 0.1)
+		mi.material_override = m
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+		w.line = mi
+	var im: ImmediateMesh = w.line.mesh
+	im.clear_surfaces()
+	im.surface_begin(Mesh.PRIMITIVE_LINE_STRIP)
+	for i in 17:
+		im.surface_add_vertex(wire_point(w, i / 16.0))
+	im.surface_end()
+
+func _build_wire(w: Dictionary) -> void:
+	var st := MeshUtil.begin()
+	var a: Vector3 = w.a
+	var b: Vector3 = w.b
+	# An iron hook on the wall, and a post on the platform
+	MeshUtil.box(st, a, Vector3(0.18, 0.18, 0.3), atan2(a.x, a.z), Color(0.25, 0.24, 0.27))
+	MeshUtil.beam(st, b - Vector3(0, 1.45, 0), b + Vector3(0, 0.12, 0), 0.14, WOOD)
+	add_child(MeshUtil.commit(st, MeshUtil.flat_material(Color.WHITE)))
+	_draw_wire(w)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(w.id)
+	for i in w.birds:
+		var tint: Color = Npc.TINTS.values()[rng.randi_range(0, Npc.TINTS.size() - 1)]
+		var bird := AnimatedSprite3D.new()
+		bird.sprite_frames = Npc.recoloured(Npc.IDLE_FRAMES, tint)
+		bird.pixel_size = 0.085
+		bird.offset = Vector2(0, 7)
+		bird.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+		bird.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+		bird.shaded = false
+		bird.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+		bird.flip_h = rng.randf() < 0.5
+		var t: float = (i + 1.0) / (w.birds + 1.0) + rng.randf_range(-0.05, 0.05)
+		bird.set_meta("t", t)
+		bird.set_meta("tint", tint)
+		bird.position = wire_point(w, t)
+		bird.play("default")
+		bird.speed_scale = rng.randf_range(0.5, 1.0)
+		add_child(bird)
+		w.perched.append(bird)
+
+# --- boost rings -----------------------------------------------------------------
+
+func _build_ring(rg: Dictionary) -> void:
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.95
+	torus.outer_radius = 1.2
+	torus.rings = 16
+	torus.ring_segments = 5
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = Color(0.55, 1.0, 0.95)
+	torus.material = m
+	var mi := MeshInstance3D.new()
+	mi.mesh = torus
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# The ring's hole faces along the way round the tower, so you glide through
+	var theta: float = rg.theta
+	var along := Vector3(cos(theta), 0, -sin(theta))
+	mi.basis = Basis(Vector3.UP.cross(along).normalized(), along, Vector3.UP.cross(along).normalized().cross(along))
+	mi.position = Vector3(sin(theta) * rg.r, rg.y, cos(theta) * rg.r)
+	add_child(mi)
+	rg.node = mi
+
+# Returns the ring the bird just flew through (or {}), and gives it a pulse
+func ring_hit(pos: Vector3) -> Dictionary:
+	for rg in rings:
+		if rg.cool > 0.0 or rg.node == null:
+			continue
+		if rg.node.position.distance_to(pos + Vector3(0, 0.6, 0)) < 1.25:
+			rg.cool = 1.5
+			var t := create_tween()
+			t.tween_property(rg.node, "scale", Vector3.ONE * 1.5, 0.12)
+			t.tween_property(rg.node, "scale", Vector3.ONE, 0.3)
+			return rg
+	return {}
+
+# Where a falling bird crossed a wire this frame (or {}): {wire, t}
+func wire_crossed(prev: Vector3, now: Vector3) -> Dictionary:
+	for w in wires:
+		var a2 := Vector2(w.a.x, w.a.z)
+		var b2 := Vector2(w.b.x, w.b.z)
+		var p2 := Vector2(now.x, now.z)
+		var q := Geometry2D.get_closest_point_to_segment(p2, a2, b2)
+		if q.distance_to(p2) > 0.45:
+			continue
+		var t: float = clamp(a2.distance_to(q) / max(a2.distance_to(b2), 0.01), 0.0, 1.0)
+		var wy := wire_point(w, t).y
+		if prev.y >= wy - 0.05 and now.y <= wy:
+			return {"wire": w, "t": t}
+	return {}
+
+# A wooden deck held up by a propeller underneath (the blades spin in tick)
+func _build_prop(holder: Node3D, s: Dictionary) -> void:
+	var top: float = s.top
+	var c := Vector2(s.cx, s.cz)
+	var st := MeshUtil.begin()
+	MeshUtil.extrude(st, s.polys[0], top - 0.22, top, Color(0.62, 0.44, 0.28), 1.0)
+	# Plank lines and a rim
+	var poly: PackedVector2Array = s.polys[0]
+	for i in poly.size():
+		var p := poly[i]
+		var q := poly[(i + 1) % poly.size()]
+		MeshUtil.beam(st, Vector3(p.x, top + 0.02, p.y), Vector3(q.x, top + 0.02, q.y), 0.1, WOOD)
+	# Motor housing under the deck, with a brass cap
+	MeshUtil.box(st, Vector3(c.x, top - 0.55, c.y), Vector3(0.6, 0.6, 0.6), 0.0, Color(0.35, 0.33, 0.38))
+	MeshUtil.cone(st, Vector3(c.x, top - 0.85, c.y), 0.3, -0.35, 6, Color(0.8, 0.62, 0.25))
+	holder.add_child(MeshUtil.commit(st, MeshUtil.flat_material(Color.WHITE)))
+	var blades := Node3D.new()
+	blades.name = "Blades"
+	blades.position = Vector3(c.x, top - 1.0, c.y)
+	var bt := MeshUtil.begin()
+	MeshUtil.box(bt, Vector3.ZERO, Vector3(3.2, 0.06, 0.3), 0.0, Color(0.55, 0.4, 0.28))
+	MeshUtil.box(bt, Vector3.ZERO, Vector3(0.3, 0.06, 3.2), 0.0, Color(0.5, 0.36, 0.25))
+	blades.add_child(MeshUtil.commit(bt, MeshUtil.flat_material(Color.WHITE)))
+	holder.add_child(blades)
+
+# A brass-edged platform riding a rail round the whole tower. The rail stays
+# put; the platform's holder is rotated by tick.
+func _build_orbit(holder: Node3D, s: Dictionary, tint: Color) -> void:
+	var top: float = s.top
+	var st := MeshUtil.begin()
+	for poly in s.polys:
+		MeshUtil.extrude(st, poly, top - 0.3, top, Color(0.95, 0.85, 0.6))
+	holder.add_child(MeshUtil.commit(st, MeshUtil.stone_material(tint.lerp(Color(1.0, 0.93, 0.8), 0.5), "slab")))
+	var rail := MeshUtil.begin()
+	var n := 40
+	var rr: float = s.rail_r
+	for i in n:
+		var a0 := TAU * i / n
+		var a1 := TAU * (i + 1) / n
+		MeshUtil.beam(rail, Vector3(sin(a0) * rr, top - 0.5, cos(a0) * rr), Vector3(sin(a1) * rr, top - 0.5, cos(a1) * rr), 0.12, Color(0.55, 0.45, 0.3))
+	add_child(MeshUtil.commit(rail, MeshUtil.flat_material(Color.WHITE)))

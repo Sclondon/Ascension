@@ -9,14 +9,18 @@ extends Player
 # Flyers are the showoffs: a bottomless stamina bucket, so they never rest,
 # aim a few ledges ahead and just flap their way up past you.
 
-const TINTS := [Color(0.6, 0.62, 0.7), Color(0.62, 0.45, 0.3), Color(0.35, 0.55, 0.9), Color(0.85, 0.85, 0.8)]
-const FLYER_TINT := Color(0.95, 0.72, 0.28)   # golden
+# Rivals are crows too, tinted a touch so they don't look like you; flyers
+# have a blue-black sheen
+const TINTS := [Color(0.3, 0.3, 0.34), Color(0.32, 0.27, 0.26), Color(0.28, 0.3, 0.3)]
+const FLYER_TINT := Color(0.22, 0.27, 0.42)
 
 var target: Dictionary = {}
 var since_flap := 0.0
 var grounded_time := 0.0
 var patience := 0.0                  # a little random hesitation before each jump
 var flyer := false
+var patience_max := 0.35
+var flap_every := 0.18              # flyers: seconds between flaps (their climb rate)
 var retarget_timer := 0.0
 
 func _init() -> void:
@@ -27,10 +31,13 @@ func _init() -> void:
 func make(is_flyer: bool) -> void:
 	flyer = is_flyer
 	dress(FLYER_TINT if flyer else TINTS[randi_range(0, TINTS.size() - 1)])
-	max_stamina = 99999.0 if flyer else 250.0
+	max_stamina = 99999.0 if flyer else randf_range(170.0, 250.0)
 	stamina = max_stamina
-	regen_rate = 110.0
-	speed_mult = 1.4 if flyer else 1.25
+	# Each bird is its own climber: some dawdle, some race
+	regen_rate = randf_range(60.0, 160.0)
+	speed_mult = randf_range(1.1, 1.6) if flyer else randf_range(0.85, 1.5)
+	patience_max = randf_range(0.05, 1.0)
+	flap_every = randf_range(0.14, 0.34)
 
 func dress(tint: Color) -> void:
 	frames_idle = Npc.recoloured(IDLE_FRAMES, tint)
@@ -70,7 +77,7 @@ func _retarget() -> void:
 				break
 	if next.get("id", "") != target.get("id", "-"):
 		target = next
-		patience = randf_range(0.0, 0.35)
+		patience = randf_range(0.0, patience_max)
 
 func read_input() -> Dictionary:
 	var out := {"ax": 0.0, "ar": 0.0, "jump_pressed": false, "jump_held": vy > 0.0}
@@ -105,7 +112,7 @@ func read_input() -> Dictionary:
 			out.ar = 0.0
 		elif (reach > 0.0 and arc < reach * 0.8) or grounded_time > 6.0:
 			out.jump_pressed = true
-	elif flyer and vy < 2.0 and y < t.top + 2.5 and since_flap > 0.18:
+	elif flyer and vy < 2.0 and y < t.top + 2.5 and since_flap > flap_every:
 		out.jump_pressed = true
 		since_flap = 0.0
 	elif vy < 0.0 and y < t.top + 0.6 and since_flap > 0.2 and stamina >= Tuning.FLAP_COST and not TowerChunk.contains(t, theta, r, 0.1):

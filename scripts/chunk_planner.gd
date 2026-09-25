@@ -7,14 +7,14 @@ class_name ChunkPlanner
 # jumps leads from this chunk's anchor to the next chunk's anchor, then extras
 # (optional ledges, traps, movers) are scattered around it.
 
-enum Kind { GROUND, LEDGE, BALCONY, PERCH, RING, CRUMBLE, MOVER, TURRET, ISLAND, FRAGILE }
+enum Kind { GROUND, LEDGE, BALCONY, PERCH, RING, CRUMBLE, MOVER, TURRET, ISLAND, FRAGILE, ORBIT, RETRACT, PROP }
 
 const ANCHOR_LIFT := 0.3
 const MIN_DY := 1.6
 const REACH_MARGIN := 0.75           # path gaps use at most 75% of the real reach
 const TURRET_RADIUS := 1.4
 const CLEARANCE := 2.6               # min height between overlapping surfaces
-const FAR_OUT := Vector2(5.5, 7.6)   # how far out (from the wall) far treasures float
+const FAR_OUT := Vector2(6.0, 11.0)  # how far out (from the wall) far treasures float
 
 # The first chunks are the same every run: a spiral of ledges round the tower
 const START_CHUNKS := 2
@@ -58,7 +58,7 @@ static func headwind(band: int) -> float:
 	return max(w.wind, p.wind) * 1.2
 
 static func is_outer(s: Dictionary) -> bool:
-	return s.kind == Kind.TURRET or s.kind == Kind.ISLAND
+	return s.kind == Kind.TURRET or s.kind == Kind.ISLAND or s.kind == Kind.PROP
 
 # How far a surface's structure hangs below its top (to keep things apart)
 static func hangs_below(s: Dictionary) -> float:
@@ -67,7 +67,13 @@ static func hangs_below(s: Dictionary) -> float:
 			return 4.2
 		Kind.ISLAND:
 			return 2.8
+		Kind.PROP:
+			return 1.8
 	return 1.2
+
+# How far a surface's structure rises above its top (roofed turrets)
+static func rises_above(s: Dictionary) -> float:
+	return 3.2 if s.get("roof", false) else 0.0
 
 # --- anchors ------------------------------------------------------------------
 
@@ -149,13 +155,14 @@ static func mover_surface(k: int, top: float, center: float, rng: RandomNumberGe
 # floating island. `dist` is how far its centre sits out from the wall.
 static func outer_surface(k: int, kind: int, top: float, center: float, dist: float, rng: RandomNumberGenerator) -> Dictionary:
 	var c := TowerShape.ring_point(k, center, dist)
-	var radius := TURRET_RADIUS if kind == Kind.TURRET else rng.randf_range(1.3, 1.7)
-	var sides := 8 if kind == Kind.TURRET else 7
-	var spin := PI / 8.0 if kind == Kind.TURRET else rng.randf() * TAU
+	var radius := TURRET_RADIUS if kind == Kind.TURRET else (1.45 if kind == Kind.PROP else rng.randf_range(1.3, 1.7))
+	var sides := 8 if kind == Kind.TURRET else (4 if kind == Kind.PROP else 7)
+	# (a propeller deck is a square, turned to face the tower)
+	var spin := PI / 8.0 if kind == Kind.TURRET else (PI / 4.0 - atan2(c.x, c.y) if kind == Kind.PROP else rng.randf() * TAU)
 	var poly := PackedVector2Array()
 	for i in sides:
 		var a := spin + TAU * i / sides
-		var rr := radius if kind == Kind.TURRET else radius * rng.randf_range(0.82, 1.1)
+		var rr := radius if kind != Kind.ISLAND else radius * rng.randf_range(0.82, 1.1)
 		poly.append(c + Vector2(cos(a), sin(a)) * rr)
 	var half := radius / c.length()
 	var s := {
@@ -163,9 +170,32 @@ static func outer_surface(k: int, kind: int, top: float, center: float, dist: fl
 		"d0": dist - radius, "d1": dist + radius, "polys": [poly],
 		"cx": c.x, "cz": c.y, "radius": radius,
 	}
-	if kind == Kind.ISLAND:
+	if kind == Kind.ISLAND or kind == Kind.PROP:
 		s.base_top = top
 		s.bob_phase = rng.randf() * TAU
+	if kind == Kind.TURRET:
+		s.roof = rng.randf() < 0.45       # some have a pitched roof on posts
+	return s
+
+# A platform that rides a rail all the way round the tower, out past the
+# ledges so it never runs through them
+static func orbit_surface(k: int, top: float, center: float, rng: RandomNumberGenerator) -> Dictionary:
+	var r0 := TowerShape.apothem(k) / cos(PI / TowerShape.sides(k)) + 2.4
+	var half := 1.0 / (r0 + 0.8)
+	var speed := rng.randf_range(0.18, 0.4) * (1.0 if rng.randf() < 0.5 else -1.0)
+	return {
+		"kind": Kind.ORBIT, "top": top, "band": TowerShape.band_of_chunk(k), "k": k,
+		"a0": center - half, "a1": center + half, "swing": PI,
+		"d0": r0 - TowerShape.apothem(k), "d1": r0 + 1.6 - TowerShape.apothem(k),
+		"polys": [TowerShape.arc_polygon(center - half, center + half, r0, r0 + 1.6)],
+		"rail_r": r0 + 0.8, "speed": speed, "phase": rng.randf() * TAU,
+	}
+
+# A ledge that slides back into the wall every few seconds
+static func retract_surface(k: int, top: float, center: float, width: float, depth: float, rng: RandomNumberGenerator) -> Dictionary:
+	var s := wall_surface(k, Kind.RETRACT, top, center, width, depth)
+	s.period = rng.randf_range(4.0, 6.5)
+	s.phase = rng.randf() * s.period
 	return s
 
 # --- reachability -------------------------------------------------------------
@@ -186,7 +216,8 @@ static func conflicts(a: Dictionary, b: Dictionary) -> bool:
 	var b_in: float = 0.0 if b.kind == Kind.TURRET else b.d0
 	if a_in > b.d1 + 0.3 or b_in > a.d1 + 0.3:
 		return false
-	return a.top - hangs_below(a) < b.top + CLEARANCE and b.top - hangs_below(b) < a.top + CLEARANCE
+	return a.top - hangs_below(a) < b.top + max(CLEARANCE, rises_above(b) + 0.6) \
+		and b.top - hangs_below(b) < a.top + max(CLEARANCE, rises_above(a) + 0.6)
 
 # Closest-point distance between two polygons, split into around / in-out
 static func _polygon_hop(pa: PackedVector2Array, pb: PackedVector2Array) -> float:
@@ -291,13 +322,17 @@ static func plan(run_seed: int, k: int) -> Dictionary:
 			kind = Kind.TURRET
 		elif roll < 0.26 and band > 0:
 			kind = Kind.ISLAND
-		elif roll < 0.26 + lerp(0.05, 0.15, d) and band > 0:
+		elif roll < 0.33 and k > 1:
+			kind = Kind.PROP
+		elif roll < 0.33 + lerp(0.05, 0.15, d) and band > 0:
 			kind = Kind.FRAGILE
-		elif roll < 0.45 and band > 0 and rng.randf() < d:
+		elif roll < 0.33 + lerp(0.05, 0.15, d) + lerp(0.02, 0.2, d) and band > 0:
+			kind = Kind.RETRACT
+		elif roll < 0.6 and band > 0 and rng.randf() < d:
 			kind = Kind.PERCH
 			width = 0.9
 			depth = 2.3
-		if kind == Kind.TURRET or kind == Kind.ISLAND:
+		if kind == Kind.TURRET or kind == Kind.ISLAND or kind == Kind.PROP:
 			width = TURRET_RADIUS * 2.0
 
 		var dir := 1.0 if rng.randf() < 0.5 else -1.0
@@ -351,7 +386,7 @@ static func plan(run_seed: int, k: int) -> Dictionary:
 		cur = next
 
 	# Extras: rest spots, detours, traps and movers
-	var extra_count := rng.randi_range(1, 3)
+	var extra_count := rng.randi_range(2, 4)
 	var extras: Array[Dictionary] = []
 	for attempt in 14:
 		if extras.size() >= extra_count:
@@ -361,20 +396,28 @@ static func plan(run_seed: int, k: int) -> Dictionary:
 		var roll := rng.randf()
 		var s: Dictionary
 		# (balconies only come as the regular anchors, so they stay orderly)
-		if roll < 0.34:
+		if roll < 0.22:
 			s = wall_surface(k, Kind.LEDGE, top, center, ledge_width(band, rng.randf()), ledge_depth(band))
-		elif roll < 0.46:
+		elif roll < 0.3:
 			s = wall_surface(k, Kind.PERCH, top, center, 0.9, 2.3)
+		elif roll < 0.43:
+			s = outer_surface(k, Kind.TURRET, top, center, rng.randf_range(3.8, 8.5), rng)
+		elif roll < 0.52 and band > 0:
+			s = outer_surface(k, Kind.ISLAND, top, center, rng.randf_range(4.0, 9.5), rng)
 		elif roll < 0.62:
-			s = outer_surface(k, Kind.TURRET, top, center, rng.randf_range(3.8, 7.0), rng)
-		elif roll < 0.72 and band > 0:
-			s = outer_surface(k, Kind.ISLAND, top, center, rng.randf_range(4.0, 7.2), rng)
-		elif roll < 0.84:
+			s = outer_surface(k, Kind.PROP, top, center, rng.randf_range(6.0, 10.5), rng)
+		elif roll < 0.69:
 			s = wall_surface(k, Kind.CRUMBLE, top, center, 2.2, 1.8)
-		elif roll < 0.92 or band < 2:
+		elif roll < 0.75:
 			s = wall_surface(k, Kind.FRAGILE, top, center, 2.4, 1.9)
-		else:
+		elif roll < 0.75 + lerp(0.04, 0.16, d):
+			s = retract_surface(k, top, center, ledge_width(band, rng.randf()), ledge_depth(band), rng)
+		elif roll < 0.93 and band > 0:
+			s = orbit_surface(k, top, center, rng)
+		elif band >= 2:
 			s = mover_surface(k, top, center, rng)
+		else:
+			s = wall_surface(k, Kind.LEDGE, top, center, ledge_width(band, rng.randf()), ledge_depth(band))
 		var clear: bool = s.top - hangs_below(s) > 0.5
 		for other in surfaces:
 			if conflicts(other, s):
@@ -390,7 +433,7 @@ static func plan(run_seed: int, k: int) -> Dictionary:
 	# poison hovers just off the route, where a careless flight drifts into it.
 	var pickups: Array[Dictionary] = []
 	for s in extras:
-		if s.kind == Kind.MOVER or s.kind == Kind.CRUMBLE or s.kind == Kind.FRAGILE or rng.randf() > 0.55:
+		if s.kind in [Kind.MOVER, Kind.CRUMBLE, Kind.FRAGILE, Kind.ORBIT, Kind.RETRACT] or rng.randf() > 0.55:
 			continue
 		pickups.append(_pickup_over(k, "feather", pickups.size(), s, 1.3))
 	var path: Array[Dictionary] = []
@@ -436,6 +479,8 @@ static func plan(run_seed: int, k: int) -> Dictionary:
 		"pickups": pickups, "ground": k == 0,
 		"drafts": _plan_drafts(rng, k, band, base, path),
 		"npcs": _plan_npcs(rng, k, surfaces),
+		"wires": _plan_wires(rng, k, surfaces),
+		"rings": _plan_rings(rng, k, path),
 	}
 
 # Columns of rising or sinking air. Updrafts sit beside the route as a
@@ -470,13 +515,55 @@ static func _plan_drafts(rng: RandomNumberGenerator, k: int, band: int, base: fl
 				break
 	return drafts
 
-# Birds (and the odd frog) sitting on ledges with something odd to say. The
-# first one is always the frog by the door.
+# Tightropes: a wire from a hook on the wall out to a post on a turret,
+# island or propeller platform. Land on one and it bounces you; jump at the
+# bottom of the bounce for a big launch. Crows like to sit on them.
+static func _plan_wires(rng: RandomNumberGenerator, k: int, surfaces: Array[Dictionary]) -> Array[Dictionary]:
+	var wires: Array[Dictionary] = []
+	if k < START_CHUNKS:
+		return wires
+	for s in surfaces:
+		if not is_outer(s) or s.get("roof", false) or rng.randf() > 0.55:
+			continue
+		var a := atan2(s.cx, s.cz) + rng.randf_range(-0.35, 0.35)
+		var hook := TowerShape.ring_point(k, a, 0.05)
+		var post_y: float = s.get("base_top", s.top) + 1.4
+		wires.append({
+			"id": "%d:w%d" % [k, wires.size()],
+			"a": Vector3(hook.x, post_y + rng.randf_range(0.5, 3.0), hook.y),
+			"b": Vector3(s.cx, post_y, s.cz),
+			"sag": rng.randf_range(0.3, 0.6),
+			"birds": rng.randi_range(2, 5) if rng.randf() < 0.55 else 0,
+			"surface": s.id,
+		})
+	return wires
+
+# Chains of boost rings out in open air, curving round and up from a route
+# ledge: glide through them for a lift
+static func _plan_rings(rng: RandomNumberGenerator, k: int, path: Array[Dictionary]) -> Array[Dictionary]:
+	var rings: Array[Dictionary] = []
+	if k < START_CHUNKS or rng.randf() > 0.45 or path.size() < 2:
+		return rings
+	var s: Dictionary = path[rng.randi_range(1, path.size() - 1)]
+	var dir := 1.0 if rng.randf() < 0.5 else -1.0
+	var a: float = (s.a0 + s.a1) * 0.5
+	var out := rng.randf_range(4.0, 6.0)
+	var y: float = s.top + 1.5
+	for i in rng.randi_range(3, 5):
+		var r := TowerShape.wall_r(k, a, out)
+		rings.append({"id": "%d:r%d" % [k, i], "theta": a, "r": r, "y": y, "dir": dir})
+		a += dir * 3.2 / r
+		out = min(out + rng.randf_range(0.5, 1.5), FAR_OUT.y)
+		y += rng.randf_range(0.3, 1.2)
+	return rings
+
+# Crows sitting on ledges, some with something odd to say. The first one is
+# always the crow by the door.
 static func _plan_npcs(rng: RandomNumberGenerator, k: int, surfaces: Array[Dictionary]) -> Array[Dictionary]:
 	var npcs: Array[Dictionary] = []
 	if k == 0:
 		var a := 0.42
-		npcs.append({"id": "0:n0", "kind": "frog", "theta": a, "r": TowerShape.wall_r(0, a, 1.2), "y": 0.0, "line": -1, "talks": true})
+		npcs.append({"id": "0:n0", "kind": "crow_grey", "theta": a, "r": TowerShape.wall_r(0, a, 1.2), "y": 0.0, "line": -1, "talks": true})
 		return npcs
 	if rng.randf() > 0.35:
 		return npcs
@@ -489,7 +576,7 @@ static func _plan_npcs(rng: RandomNumberGenerator, k: int, surfaces: Array[Dicti
 	var s: Dictionary = spots[rng.randi_range(0, spots.size() - 1)]
 	var a: float = lerp(s.a0, s.a1, rng.randf_range(0.25, 0.75))
 	var r: float = Vector2(s.cx, s.cz).length() if is_outer(s) else TowerShape.wall_r(s.k, a, s.d1 * 0.55)
-	var kinds := ["dove", "owl", "jay", "frog"]
+	var kinds := ["crow_grey", "crow_blue", "crow_brown"]
 	npcs.append({"id": "%d:n0" % k, "kind": kinds[rng.randi_range(0, kinds.size() - 1)], "theta": a, "r": r,
 		"y": s.get("base_top", s.top), "line": rng.randi(), "surface": s.id if s.has("id") else "",
 		"talks": rng.randf() < 0.5})
@@ -522,13 +609,17 @@ static func _place_beside(cur: Dictionary, kind: int, k: int, top: float, dir: f
 	else:
 		a1 = cur.a0 - ang_gap
 		a0 = a1 - ang_w
-	if kind == Kind.TURRET or kind == Kind.ISLAND:
+	if kind == Kind.TURRET or kind == Kind.ISLAND or kind == Kind.PROP:
 		# Same rng draws every retry, so a pulled-in retry keeps its shape
 		var state := rng.state
 		var s := outer_surface(k, kind, top, (a0 + a1) * 0.5, dist, rng)
 		rng.state = state
 		return s
-	return _strip(k, kind, top, a0, a1, 0.0, depth)
+	var s := _strip(k, kind, top, a0, a1, 0.0, depth)
+	if kind == Kind.RETRACT:
+		s.period = 5.0
+		s.phase = fposmod(a0 * 7.3, 5.0)
+	return s
 
 static func _plan_windows(rng: RandomNumberGenerator, k: int, base: float, surfaces: Array[Dictionary], rose: bool, ground: bool) -> Array[Dictionary]:
 	var n := TowerShape.sides(k)
@@ -569,5 +660,8 @@ static func _plan_windows(rng: RandomNumberGenerator, k: int, base: float, surfa
 				ok = false
 				break
 		if ok:
-			windows.append({"face": face, "y": y, "w": w, "h": h, "style": 0, "seed": rng.randf() * 100.0, "hue": hue})
+			# Mostly stained glass; some lamplit, some dark and barred
+			var roll := rng.randf()
+			var style := 0 if roll < 0.55 else (3 if roll < 0.8 else 4)
+			windows.append({"face": face, "y": y, "w": w, "h": h, "style": style, "seed": rng.randf() * 100.0, "hue": hue})
 	return windows

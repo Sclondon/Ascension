@@ -182,3 +182,24 @@ func smash(s: Dictionary) -> void:
 	var c := chunk_of(s)
 	if c:
 		c.smash(s)
+
+# A wire the bird crossed while falling this frame: {wire, t, chunk} or {}
+func wire_crossed(prev: Vector3, now: Vector3) -> Dictionary:
+	var c := TowerShape.chunk_at(now.y)
+	for k in [c, c - 1, c + 1]:
+		if chunks.has(k):
+			var hit: Dictionary = chunks[k].wire_crossed(prev, now)
+			if not hit.is_empty():
+				hit.chunk = chunks[k]
+				return hit
+	return {}
+
+# The boost ring the bird is flying through (or {})
+func ring_hit(pos: Vector3) -> Dictionary:
+	var c := TowerShape.chunk_at(pos.y)
+	for k in [c, c - 1, c + 1]:
+		if chunks.has(k):
+			var rg: Dictionary = chunks[k].ring_hit(pos)
+			if not rg.is_empty():
+				return rg
+	return {}

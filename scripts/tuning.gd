@@ -21,8 +21,8 @@ const FEATHER_BONUS := 5.0           # bucket growth per gold feather
 const FEATHER_REFILL := 33.0         # and it tops you up by one flap
 
 # Holding jump while falling glides: gravity barely pulls, drains stamina
-const GLIDE_GRAVITY := 0.12          # fraction of normal gravity while gliding
-const GLIDE_MAX_SINK := 5.0          # glide never falls faster than this (m/s)
+const GLIDE_GRAVITY := 0.08          # fraction of normal gravity while gliding
+const GLIDE_MAX_SINK := 4.0          # glide never falls faster than this (m/s)
 const GLIDE_COST := 8.0              # stamina per second (a full bar glides ~15 s)
 const GLIDE_BRAKE := 45.0            # how quickly a fast fall slows into a glide
 
@@ -45,7 +45,7 @@ const AIR_ACCEL := 40.0
 const COYOTE_TIME := 0.1
 const JUMP_BUFFER := 0.12
 const WALL_MARGIN := 0.35            # closest the bird gets to the wall
-const OUTER_REACH := 8.5             # furthest out from a face centre (turrets live out here)
+const OUTER_REACH := 12.0            # furthest out from the wall (turrets, props, rings live out here)
 const FOOT_TOLERANCE := 0.2
 const STUN_FALL := 14.0              # falls longer than this stun briefly
 const STUN_TIME := 0.45
@@ -97,3 +97,10 @@ static var low_quality := false
 # Scale a particle count for the current quality
 static func particles(n: int) -> int:
 	return maxi(1, int(n * (0.4 if low_quality else 1.0)))
+
+# Tightropes and boost rings
+const WIRE_LAUNCH := 3.5             # extra jump speed off a wire (and it's free)
+const WIRE_DIP_BOOST := 11.0         # more still, per metre the wire is bent down
+const RING_LIFT := 10.0              # upward speed a boost ring gives
+const RING_PUSH := 6.0               # and a shove along the way you're going
+const RING_STAMINA := 15.0
